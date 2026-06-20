@@ -1,0 +1,23 @@
+[project]
+name = "github-project-digest"
+version = "0.1.0"
+description = "Fetch GitHub Project v2 issue items with GraphQL and render a tiny digest with Jinja2."
+requires-python = ">=3.11"
+dependencies = [
+  "gql[requests]>=4.0.0",
+  "Jinja2>=3.1.0",
+  "python-dotenv>=1.0.0",
+  "PyYAML>=6.0.0",
+]
+
+[project.scripts]
+github-project-digest = "github_project_digest.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]

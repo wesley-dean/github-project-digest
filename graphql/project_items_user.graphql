@@ -1,0 +1,101 @@
+query ProjectItemsForUserProject(
+  $owner: String!
+  $projectNumber: Int!
+  $assigneeLogin: String!
+  $cursor: String
+  $pageSize: Int!
+  $fieldValueLimit: Int!
+) {
+  assignee: user(login: $assigneeLogin) {
+    login
+    name
+  }
+  user(login: $owner) {
+    projectV2(number: $projectNumber) {
+      id
+      title
+      url
+      items(first: $pageSize, after: $cursor) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          content {
+            __typename
+            ... on Issue {
+              id
+              number
+              title
+              url
+              state
+              repository {
+                nameWithOwner
+                url
+              }
+              assignees(first: 20) {
+                nodes {
+                  login
+                  name
+                }
+              }
+            }
+            ... on PullRequest {
+              id
+              number
+              title
+              url
+              state
+              repository {
+                nameWithOwner
+                url
+              }
+              assignees(first: 20) {
+                nodes {
+                  login
+                  name
+                }
+              }
+            }
+          }
+          fieldValues(first: $fieldValueLimit) {
+            nodes {
+              __typename
+              ... on ProjectV2ItemFieldTextValue {
+                text
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldDateValue {
+                date
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldNumberValue {
+                number
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                name
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldIterationValue {
+                title
+                startDate
+                duration
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldUserValue {
+                users(first: 20) { nodes { login name } }
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldRepositoryValue {
+                repository { nameWithOwner url }
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
