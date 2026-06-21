@@ -1,0 +1,18 @@
+{{ project.title }}
+{{ project.url }}
+
+Assignee: {{ assignee.login }}{% if requested_user != assignee.login %} (requested: {{ requested_user }}){% endif %}
+Issues matching: {{ filter_query }}
+Summary: {{ summary.total }} issue{{ '' if summary.total == 1 else 's' }}{% if summary.due_today %}, {{ summary.due_today }} due today{% endif %}{% if summary.overdue %}, {{ summary.overdue }} overdue{% endif %}, {{ summary.with_due_date }} with due dates, {{ summary.without_due_date }} unscheduled
+
+{% if count %}
+{% for section in sections if section.issues %}
+{{ section.title }} ({{ section.count }})
+{% for issue in section.issues %}
+- {{ issue.due_marker }} {{ issue.issue_ref ~ ' ' if issue.issue_ref else '' }}{{ issue.title }}{{ ' Due: ' ~ issue.due_date if issue.due_date else '' }}{{ ' - ' ~ issue.url if issue.url else '' }}
+{% endfor %}
+
+{% endfor %}
+{% else %}
+No matching issues found.
+{% endif %}
