@@ -7,8 +7,9 @@ on:
     branches:
       - "master"
       - "main"
-    tags:
-      - "v*"
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 permissions: read-all
@@ -27,6 +28,6 @@ jobs:
           dockerhub_token: ${{ secrets.DOCKERHUB_PAT }}
           ghcr_token: ${{ secrets.GHCR_PAT }}
           ghcr_username: ${{ secrets.GHUB_USERNAME }}
-          github_ref: ${{ github.ref }}
+          github_ref: ${{ github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) || github.ref }}
           repository_name: ${{ github.event.repository.name }}
           platforms: linux/amd64
