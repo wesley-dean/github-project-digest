@@ -45,7 +45,7 @@ jobs:
         id: create-release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # pin@v3.0.1
         with:
-          token: "${{ secrets.GITHUB_TOKEN }}"
+          token: "${{ secrets.PAT }}"
           name: "v${{ steps.calculate-version.outputs.version-string }}"
           body: "${{ steps.release-notes.outputs.release-notes }}"
           tag_name: "v${{ steps.calculate-version.outputs.version-string }}"
