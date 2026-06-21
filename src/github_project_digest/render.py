@@ -2,7 +2,13 @@
 @brief Render digest data through Jinja2 templates.
 @details
 This module keeps presentation concerns inside templates while source code
-handles the location of those templates and safe rendering defaults.
+handles template discovery and safe rendering defaults.  The digest pipeline
+renders both plain text and HTML through the same function so STDOUT output and
+future email delivery remain consistent.
+
+The renderer intentionally does not shape data.  Normalization, filtering, and
+digest preparation happen before rendering so templates can stay focused on
+presentation and avoid duplicating business logic.
 """
 
 from __future__ import annotations
