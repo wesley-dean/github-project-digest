@@ -10,7 +10,19 @@ import ssl
 
 @dataclass(frozen=True)
 class SmtpConfig:
-    """SMTP settings used to deliver a single digest email."""
+    """@class SmtpConfig
+    @brief Immutable SMTP settings for one digest delivery.
+    @details
+    `SmtpConfig` keeps email delivery configuration separate from digest
+    rendering and GitHub querying.  The digest pipeline can therefore render to
+    STDOUT without SMTP settings, or deliver the same rendered text and HTML
+    bodies when a recipient is supplied through `GITHUB_USER`.
+
+    The class supports both STARTTLS and implicit SSL because different SMTP
+    providers expose different secure transport conventions.  Username and
+    password remain optional so the tool can also work with trusted relays that
+    do not require application-level authentication.
+    """
 
     host: str
     port: int
