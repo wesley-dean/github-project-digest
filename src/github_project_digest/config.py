@@ -24,6 +24,15 @@ from github_project_digest.emailer import SmtpConfig
 from github_project_digest.github_auth import GitHubAppConfig
 
 
+"""@var DEFAULT_FILTER
+@brief Default Project filter used when no filter is supplied.
+@details
+The default filter encodes the primary daily-digest use case: show open issues
+from the current sprint that are assigned to the selected GitHub user.  The
+`@user` placeholder is resolved later against `GITHUB_USER` or the authenticated
+viewer, which lets the same default work for local single-user runs and Jenkins
+fan-out jobs.
+"""
 DEFAULT_FILTER = "sprint:@current assignee:@user is:issue state:open"
 
 
