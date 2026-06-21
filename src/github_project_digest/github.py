@@ -1,4 +1,15 @@
-"""GitHub GraphQL access for Project v2 items."""
+"""@file github.py
+@brief Retrieve GitHub Project v2 items through GraphQL.
+@details
+This module is the GitHub data-access boundary for the digest pipeline.  It owns
+GraphQL transport setup, viewer login resolution, owner-type specific Project
+queries, pagination, and basic API-boundary validation.
+
+Authentication selection happens before this module is used.  The client accepts
+an already-resolved token so it can stay focused on retrieving Project data
+rather than deciding whether that token came from a PAT or a GitHub App
+installation.
+"""
 
 from __future__ import annotations
 
