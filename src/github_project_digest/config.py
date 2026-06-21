@@ -8,10 +8,9 @@ authentication, SMTP delivery, template selection, and Project filtering behind
 one consistent interface so the rest of the application can operate on typed
 values rather than raw process environment strings.
 
-The module also owns the `GITHUB_USER` parsing convention.  A value such as
-`wesley-dean:wesdean@example.com` identifies both the GitHub assignee and the
-optional email destination, while `wesley-dean` or `@me` keeps the tool in
-STDOUT-only mode.
+The module also owns the `GITHUB_USER` parsing convention.  A colon-separated
+value identifies both the GitHub assignee and the optional email destination,
+while a bare login or `@me` keeps the tool in STDOUT-only mode.
 """
 
 from __future__ import annotations
@@ -30,7 +29,16 @@ DEFAULT_FILTER = "sprint:@current assignee:@user is:issue state:open"
 
 @dataclass(frozen=True)
 class Config:
-    """Runtime configuration loaded from environment variables."""
+    """@class Config
+    @brief Immutable runtime configuration for one digest execution.
+    @details
+    `Config` is the boundary between the operating environment and the digest
+    pipeline.  The rest of the application receives typed values from this
+    dataclass instead of reading environment variables directly.  This keeps
+    command-line execution, Docker execution, Jenkins execution, PAT auth,
+    GitHub App auth, SMTP delivery, and template rendering aligned through one
+    configuration contract.
+    """
 
     github_token: str | None
     github_app: GitHubAppConfig
