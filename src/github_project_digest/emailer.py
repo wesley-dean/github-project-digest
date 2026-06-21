@@ -37,7 +37,28 @@ class SmtpConfig:
 
 
 def send_digest_email(config: SmtpConfig, text_body: str, html_body: str | None = None) -> None:
-    """Send the digest as a multipart email through SMTP."""
+    """@fn send_digest_email(config, text_body, html_body=None)
+    @brief Send a rendered digest email through SMTP.
+    @details
+    The digest is sent with the plain-text body always present.  When an HTML
+    body is supplied, it is added as an alternate representation so email clients
+    can choose the best display form while still preserving a readable fallback.
+
+    SMTP transport behavior is selected from `SmtpConfig`: implicit SSL is used
+    when requested, otherwise the function connects with ordinary SMTP and then
+    upgrades with STARTTLS when configured.
+
+    @param config SMTP connection, sender, recipient, subject, and security
+                  settings for this delivery.
+    @param text_body Plain-text digest body.  This is always included.
+    @param html_body Optional HTML digest body to include as an alternate part.
+    @returns None.
+
+    @par Examples
+    @code
+    send_digest_email(config, text_output, html_output)
+    @endcode
+    """
 
     message = EmailMessage()
     message["From"] = config.sender
@@ -66,7 +87,23 @@ def send_digest_email(config: SmtpConfig, text_body: str, html_body: str | None 
 
 
 def _login_if_configured(server: smtplib.SMTP, config: SmtpConfig) -> None:
-    """Authenticate to SMTP when username/password were supplied."""
+    """@fn _login_if_configured(server, config)
+    @brief Authenticate to SMTP when both login values were supplied.
+    @details
+    SMTP login values are treated as a pair.  Supplying only one is usually a
+    configuration mistake, so the function fails before attempting delivery.
+    When neither value is supplied, the function leaves the session unchanged to
+    support trusted relays and local SMTP infrastructure.
+
+    @param server Active SMTP or SMTP_SSL connection.
+    @param config SMTP configuration that may include login values.
+    @returns None.
+
+    @par Examples
+    @code
+    _login_if_configured(server, config)
+    @endcode
+    """
 
     if config.username or config.password:
         if not config.username or not config.password:
