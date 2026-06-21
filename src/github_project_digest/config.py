@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 
 from github_project_digest.emailer import SmtpConfig
+from github_project_digest.github_auth import GitHubAppConfig
 
 
 DEFAULT_FILTER = "sprint:@current assignee:@user is:issue state:open"
@@ -17,7 +18,8 @@ DEFAULT_FILTER = "sprint:@current assignee:@user is:issue state:open"
 class Config:
     """Runtime configuration loaded from environment variables."""
 
-    github_token: str
+    github_token: str | None
+    github_app: GitHubAppConfig
     project_owner: str
     project_number: int
     project_owner_type: str
@@ -126,15 +128,21 @@ def load_config() -> Config:
     if owner_type not in {"organization", "user"}:
         raise ValueError("GITHUB_PROJECT_OWNER_TYPE must be 'organization' or 'user'")
 
-    output_format = os.getenv("DIGEST_OUTPUT_FORMAT", "text").lower().strip()
+    output_format = os.getenv("DIGEST_OUTPUT_FORMAT", os.getenv("OUTPUT_FORMAT", "text")).lower().strip()
     if output_format not in {"text", "html", "json", "yaml"}:
-        raise ValueError("DIGEST_OUTPUT_FORMAT must be one of: text, html, json, yaml")
+        raise ValueError("DIGEST_OUTPUT_FORMAT/OUTPUT_FORMAT must be one of: text, html, json, yaml")
 
     raw_github_user = _selected_user_value()
     github_user, recipient_email = _split_user_and_email(raw_github_user)
 
     return Config(
-        github_token=_required("GITHUB_TOKEN"),
+        github_token=_optional_env("GITHUB_TOKEN"),
+        github_app=GitHubAppConfig(
+            app_id=_optional_env("GITHUB_APP_ID"),
+            installation_id=_optional_env("GITHUB_APP_INSTALLATION_ID"),
+            private_key=_optional_env("GITHUB_APP_PRIVATE_KEY"),
+            private_key_file=_optional_env("GITHUB_APP_PRIVATE_KEY_FILE"),
+        ),
         project_owner=_required("GITHUB_PROJECT_OWNER"),
         project_number=_int_env("GITHUB_PROJECT_NUMBER", 0),
         project_owner_type=owner_type,

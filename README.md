@@ -16,8 +16,8 @@ MVP Python project that fetches GitHub Project v2 items with GraphQL, applies a 
 ## Requirements
 
 - Python 3.11+
-- A GitHub token with access to the Project.
-- For GitHub Project reads, GitHub documents `read:project` for queries. Depending on token type and org policy, you may also need repository read access for private issue repositories.
+- A GitHub token with access to the Project, or GitHub App credentials capable of minting an installation token.
+- For GitHub Project reads, GitHub documents `read:project` for queries. Depending on token type, App permissions, and org policy, you may also need repository read access for private issue repositories.
 
 ## Setup
 
@@ -31,7 +31,15 @@ cp .env.example .env
 Edit `.env`.
 
 ```dotenv
+# Option 1: direct token/PAT. This takes precedence when set.
 GITHUB_TOKEN=ghp_replace_me
+
+# Option 2: GitHub App authentication. Used only when GITHUB_TOKEN is empty.
+GITHUB_APP_ID=
+GITHUB_APP_INSTALLATION_ID=
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_APP_PRIVATE_KEY_FILE=
+
 GITHUB_PROJECT_OWNER=octo-org
 GITHUB_PROJECT_NUMBER=5
 GITHUB_PROJECT_OWNER_TYPE=organization
@@ -74,6 +82,36 @@ templates/digest.txt.j2
 templates/digest.html.j2
 ```
 
+## Authentication modes
+
+The tool supports two GitHub authentication modes.
+
+The simplest mode is a direct token/PAT:
+
+```dotenv
+GITHUB_TOKEN=ghp_replace_me
+```
+
+For scheduled automation, you can instead use a GitHub App installation. Leave `GITHUB_TOKEN` empty and provide App credentials:
+
+```dotenv
+GITHUB_TOKEN=
+GITHUB_APP_ID=123456
+GITHUB_APP_INSTALLATION_ID=98765432
+GITHUB_APP_PRIVATE_KEY_FILE=/run/secrets/github-app.pem
+```
+
+Or provide the PEM text directly, which is useful for CI systems that store secrets as text. Literal `\n` sequences are converted to real newlines before signing the JWT.
+
+```dotenv
+GITHUB_TOKEN=
+GITHUB_APP_ID=123456
+GITHUB_APP_INSTALLATION_ID=98765432
+GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----
+```
+
+If both are set, `GITHUB_TOKEN` wins. The GitHub App mode generates a short-lived installation token and then uses the same GraphQL code path as PAT mode.
+
 ## SMTP email delivery
 
 By default, the digest is written to STDOUT only. To also send the digest by email, set `GITHUB_USER` to `username:email@example.com` and provide the required SMTP settings. The script currently supports a single destination address per run.
@@ -96,13 +134,13 @@ GITHUB_USER=@me
 # or
 GITHUB_USER=octocat
 # or
-GITHUB_GITHUB_USER=octocat:octocat@example.com
+GITHUB_USER=octocat:octocat@example.com
 ```
 
 This makes shell iteration straightforward:
 
 ```bash
-for GITHUB_USER in wesley-dean:wesley-dean@example.com joe-dean:joe-dean@example.com; do
+for GITHUB_USER in wesley-dean:wesdean@kdaweb.com brendadowdean:brenda@kdaweb.com; do
   github-project-digest
 done
 ```
@@ -169,7 +207,7 @@ python -m pip install -e '.[dev]'
 PYTHONPATH=src pytest -q
 ```
 
-The tests cover configuration loading, filter parsing, local filtering, Project item normalization, digest grouping/sorting, text and HTML rendering, SMTP message construction, and GitHub client pagination behavior using mocked GraphQL responses.
+The tests cover configuration loading, GitHub App token generation, filter parsing, local filtering, Project item normalization, digest grouping/sorting, text and HTML rendering, SMTP message construction, and GitHub client pagination behavior using mocked GraphQL responses.
 
 
 ## Container usage
@@ -195,7 +233,7 @@ Run for a specific GitHub assignee and destination email:
 ```bash
 podman run --rm \
   --env-file .env \
-  -e GITHUB_USER='wesley-dean:wesley-dean@example.com' \
+  -e GITHUB_USER='wesley-dean:wesdean@kdaweb.com' \
   github-project-digest
 ```
 
@@ -203,8 +241,8 @@ Iterate across multiple users from the shell:
 
 ```bash
 for GITHUB_USER in \
-  wesley-dean:wesley-dean@example.com \
-  joe-dean:joe-dean@example.com
+  wesley-dean:wesdean@kdaweb.com \
+  brendadowdean:brenda@kdaweb.com
 do
   podman run --rm \
     --env-file .env \
@@ -214,3 +252,7 @@ done
 ```
 
 The image entrypoint is `github-project-digest`, so command-line arguments are not required. The container intentionally does not include your `.env` file; pass secrets at runtime with `--env-file`, individual `-e` values, or your CI/CD secret mechanism.
+
+## GitHub Actions unit tests
+
+This repository includes a workflow at `.github/workflows/tests.yml` that runs the pytest suite on pushes, pull requests, and manual dispatches. The workflow tests against Python 3.11 and 3.12.

@@ -101,3 +101,33 @@ def test_load_config_ignores_shell_user(monkeypatch, tmp_path) -> None:
 
     assert config.github_user == "@me"
     assert config.recipient_email is None
+
+
+def test_load_config_accepts_github_app_auth_without_pat(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("GITHUB_APP_ID", "12345")
+    monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "67890")
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----")
+    monkeypatch.setenv("GITHUB_PROJECT_OWNER", "wesley-dean")
+    monkeypatch.setenv("GITHUB_PROJECT_NUMBER", "1")
+
+    config = load_config()
+
+    assert config.github_token is None
+    assert config.github_app.app_id == "12345"
+    assert config.github_app.installation_id == "67890"
+    assert config.github_app.private_key is not None
+    assert config.github_app.configured is True
+
+
+def test_load_config_supports_output_format_alias(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setenv("GITHUB_PROJECT_OWNER", "wesley-dean")
+    monkeypatch.setenv("GITHUB_PROJECT_NUMBER", "1")
+    monkeypatch.setenv("OUTPUT_FORMAT", "html")
+
+    config = load_config()
+
+    assert config.output_format == "html"

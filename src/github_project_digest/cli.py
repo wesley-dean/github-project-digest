@@ -12,6 +12,7 @@ from github_project_digest.config import load_config
 from github_project_digest.filtering import apply_filter, parse_filter
 from github_project_digest.digest import build_digest_sections, build_digest_summary
 from github_project_digest.github import GitHubProjectClient
+from github_project_digest.github_auth import resolve_github_token
 from github_project_digest.normalize import normalize_project
 from github_project_digest.emailer import send_digest_email
 from github_project_digest.render import render_digest
@@ -22,7 +23,8 @@ def main() -> int:
 
     try:
         config = load_config()
-        client = GitHubProjectClient(config.github_token)
+        github_token = resolve_github_token(config.github_token, config.github_app)
+        client = GitHubProjectClient(github_token)
         assignee_login = client.resolve_user_login(config.github_user)
         raw = client.fetch_project_items(
             owner=config.project_owner,
