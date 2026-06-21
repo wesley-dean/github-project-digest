@@ -31,18 +31,29 @@ class ProjectFilter:
 
 
 def parse_filter(filter_query: str, user_login: str) -> ProjectFilter:
-    """Parse a minimal filter subset.
+    """@fn parse_filter(filter_query, user_login)
+    @brief Parse the supported subset of Project digest filter syntax.
+    @details
+    The digest uses familiar GitHub-style filter terms, but it intentionally
+    supports only the subset needed for the daily task-list workflow.  This keeps
+    the MVP predictable and avoids implying full compatibility with GitHub's
+    Project search language.
 
-    Supported terms:
-    - assignee:<login>, assignee:@me, assignee:@user
-    - user:<login>, user:@me, user:@user
-    - is:issue
-    - state:open, state:closed, status:open, status:closed
-    - sprint:@current, iteration:@current
+    `@me`, `@user`, `$user`, and `${user}` resolve to the already-selected
+    assignee login.  That lets templates, Jenkins jobs, and local runs reuse the
+    same default filter while changing only `GITHUB_USER`.
 
-    @me and @user both resolve to the configured GITHUB_USER value. If
-    GITHUB_USER itself is @me, the caller should pass the authenticated viewer
-    login as user_login.
+    @param filter_query Raw filter expression from configuration.
+    @param user_login Resolved GitHub login for the selected digest assignee.
+    @returns Parsed `ProjectFilter` object.
+
+    @par Examples
+    @code
+    project_filter = parse_filter(
+        "sprint:@current assignee:@user is:issue state:open",
+        "wesley-dean",
+    )
+    @endcode
     """
 
     assignee = None
@@ -80,12 +91,47 @@ def parse_filter(filter_query: str, user_login: str) -> ProjectFilter:
 
 
 def apply_filter(items: list[dict[str, Any]], project_filter: ProjectFilter) -> list[dict[str, Any]]:
-    """Apply the MVP local filter to normalized Project items."""
+    """@fn apply_filter(items, project_filter)
+    @brief Apply a parsed Project filter to normalized Project items.
+    @details
+    Filtering happens locally after GraphQL retrieval because Project item data
+    includes fields, assignees, state, and content type in one normalized shape.
+    This keeps the GraphQL query simpler and allows the digest to evolve its
+    supported filter subset without rewriting the query for every condition.
+
+    @param items Normalized Project items.
+    @param project_filter Parsed filter criteria.
+    @returns Items that match the supported filter criteria.
+
+    @par Examples
+    @code
+    visible_items = apply_filter(normalized_items, project_filter)
+    @endcode
+    """
 
     return [item for item in items if _matches(item, project_filter)]
 
 
 def _matches(item: dict[str, Any], project_filter: ProjectFilter) -> bool:
+    """@fn _matches(item, project_filter)
+    @brief Determine whether one normalized item satisfies a parsed filter.
+    @details
+    Each supported filter field is optional.  When a criterion is absent, it is
+    ignored.  When present, the item must satisfy that criterion to remain in the
+    digest.  This explicit conjunction keeps the MVP behavior easy to reason
+    about and avoids hidden ranking or partial-match behavior.
+
+    @param item Normalized Project item to test.
+    @param project_filter Parsed filter criteria.
+    @returns `True` when the item should be included in the digest.
+
+    @par Examples
+    @code
+    if _matches(item, project_filter):
+        included.append(item)
+    @endcode
+    """
+
     if project_filter.content_type and item.get("content_type") != project_filter.content_type:
         return False
 
@@ -102,6 +148,23 @@ def _matches(item: dict[str, Any], project_filter: ProjectFilter) -> bool:
 
 
 def _has_current_iteration(item: dict[str, Any]) -> bool:
+    """@fn _has_current_iteration(item)
+    @brief Detect whether an item belongs to the current sprint or iteration.
+    @details
+    GitHub Projects may use either `Sprint` or `Iteration` field names depending
+    on how the board was configured.  The digest treats those names as
+    equivalent and looks for a normalized field value whose `is_current` flag is
+    true.
+
+    @param item Normalized Project item whose fields should be inspected.
+    @returns `True` when the item has a current sprint or iteration value.
+
+    @par Examples
+    @code
+    current = _has_current_iteration(item)
+    @endcode
+    """
+
     fields = item.get("fields") or {}
     for field_name, value in fields.items():
         if field_name.lower() not in {"sprint", "iteration"}:
