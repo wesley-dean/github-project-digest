@@ -12,7 +12,20 @@ GRAPHQL_ENDPOINT = "https://api.github.com/graphql"
 
 
 class GitHubProjectClient:
-    """Small GitHub GraphQL client focused on Project v2 item retrieval."""
+    """@class GitHubProjectClient
+    @brief Small GitHub GraphQL client focused on Project v2 item retrieval.
+    @details
+    The client owns the transport-level details for GitHub GraphQL access while
+    leaving configuration, authentication selection, filtering, normalization,
+    and rendering to their own modules.  This keeps the GitHub boundary narrow:
+    callers provide an already-resolved token and receive raw Project item data
+    that can be normalized elsewhere.
+
+    The client deliberately loads GraphQL documents from files instead of
+    embedding query strings in Python.  That separation makes it easier to
+    inspect and revise the GitHub query shape without mixing API structure with
+    application control flow.
+    """
 
     def __init__(self, token: str) -> None:
         transport = RequestsHTTPTransport(
