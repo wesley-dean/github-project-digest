@@ -163,19 +163,43 @@ def _optional_env(name: str) -> str | None:
 
 
 def _selected_user_value() -> str:
-    """Return the requested digest assignee specification.
+    """@fn _selected_user_value()
+    @brief Return the requested digest assignee specification.
+    @details
+    The tool intentionally reads `GITHUB_USER` rather than the shell's ordinary
+    `USER` variable.  That choice prevents a login shell, Jenkins agent, or
+    container runtime from accidentally changing which GitHub assignee receives
+    a digest.  When `GITHUB_USER` is absent, `@me` keeps local use convenient by
+    deferring assignee resolution to the authenticated GitHub account.
 
-    GITHUB_USER may be either a GitHub login, @me, or a compound value in
-    the form username:email@example.com. The ordinary shell USER variable is
-    intentionally ignored so a login shell cannot accidentally change the
-    digest assignee.
+    @returns The configured GitHub user expression, or `@me` by default.
+
+    @par Examples
+    @code
+    raw_user = _selected_user_value()
+    @endcode
     """
 
     return _optional_env("GITHUB_USER") or "@me"
 
 
 def _split_user_and_email(value: str) -> tuple[str, str | None]:
-    """Split a GITHUB_USER value into GitHub login and optional destination email."""
+    """@fn _split_user_and_email(value)
+    @brief Split a GitHub user expression into assignee and recipient parts.
+    @details
+    `GITHUB_USER` supports both a bare assignee and a compound `assignee:email`
+    form.  The compound form lets shells and Jenkins jobs iterate over users
+    without introducing a separate recipients file.  Only the first colon is
+    significant so the parser remains predictable.
+
+    @param value Raw `GITHUB_USER` value.
+    @returns Tuple containing the GitHub login expression and optional email.
+
+    @par Examples
+    @code
+    user, email = _split_user_and_email("octocat:octocat@example.com")
+    @endcode
+    """
 
     user_value = (value or "@me").strip() or "@me"
     if ":" not in user_value:
@@ -188,6 +212,23 @@ def _split_user_and_email(value: str) -> tuple[str, str | None]:
 
 
 def _load_smtp_config(recipient: str | None) -> SmtpConfig | None:
+    """@fn _load_smtp_config(recipient)
+    @brief Build SMTP configuration when email delivery is requested.
+    @details
+    SMTP delivery is optional.  A missing recipient means the tool should render
+    to STDOUT only, which keeps local testing and dry shell runs useful.  When a
+    recipient is present, the required SMTP connection values are read and
+    validated here before the digest pipeline attempts delivery.
+
+    @param recipient Destination email address parsed from `GITHUB_USER`.
+    @returns `SmtpConfig` when delivery is enabled, otherwise `None`.
+
+    @par Examples
+    @code
+    smtp = _load_smtp_config(recipient_email)
+    @endcode
+    """
+
     if not recipient:
         return None
 
@@ -209,8 +250,27 @@ def _load_smtp_config(recipient: str | None) -> SmtpConfig | None:
         timeout=_int_env("SMTP_TIMEOUT", 30),
     )
 
+
 def load_config() -> Config:
-    """Load configuration from .env and the process environment."""
+    """@fn load_config()
+    @brief Load and normalize all runtime configuration.
+    @details
+    This function is the public entrypoint for configuration.  It loads `.env`
+    values, validates constrained settings, parses the selected GitHub user and
+    optional recipient email, and returns a single immutable `Config` instance
+    for the rest of the digest pipeline.
+
+    Environment access is intentionally concentrated here so GitHub access,
+    filtering, rendering, and email delivery can be tested with explicit values
+    rather than direct process-state dependencies.
+
+    @returns Fully populated runtime `Config`.
+
+    @par Examples
+    @code
+    config = load_config()
+    @endcode
+    """
 
     load_dotenv(override=True)
 
