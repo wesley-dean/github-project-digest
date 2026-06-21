@@ -8,6 +8,15 @@ from typing import Any
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 
+"""@var GRAPHQL_ENDPOINT
+@brief GitHub GraphQL API endpoint used for Project v2 queries.
+@details
+Project v2 data is retrieved through GitHub's GraphQL API because Projects,
+Project fields, field values, and issue content relationships are represented
+more naturally through GraphQL than through the REST API.  The endpoint is kept
+as a constant because this tool targets GitHub.com rather than GitHub Enterprise
+Server at this stage.
+"""
 GRAPHQL_ENDPOINT = "https://api.github.com/graphql"
 
 
