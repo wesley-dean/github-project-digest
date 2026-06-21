@@ -5,6 +5,14 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+"""@var SECTION_DEFINITIONS
+@brief Ordered digest sections rendered by the text and HTML templates.
+@details
+The section list is deliberately data-driven so grouping order stays consistent
+across plain text, HTML, JSON, YAML, and future delivery mechanisms.  The keys
+are internal stable identifiers used by the grouping logic, while the titles are
+human-facing labels rendered by templates.
+"""
 SECTION_DEFINITIONS = [
     {"key": "blocked", "title": "Blocked"},
     {"key": "in_progress", "title": "In Progress"},
