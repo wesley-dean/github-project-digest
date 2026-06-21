@@ -1,4 +1,6 @@
 ---
+name: Versioning
+
 # yamllint disable-line rule:truthy
 on:
   push:
@@ -6,9 +8,10 @@ on:
       - main
   workflow_dispatch:
 
-name: Versioning
 permissions:
-  contents: read
+  contents: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: "${{ github.ref }}-${{ github.workflow }}"
@@ -17,8 +20,6 @@ concurrency:
 jobs:
   versioning:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # pin@v4
@@ -26,28 +27,21 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: calculate version
-        id: calculate-version
-        uses: bitshifted/git-auto-semver@c4e8f005e839f822325356f141939cf6c76b5701 # pin@v1
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # pin@v4
         with:
-          create_tag: true
-          initial_version: 0.0.1
-          tag_prefix: v
+          node-version: 22
 
-      - name: Generate release notes
-        id: release-notes
-        uses: RedCrafter07/release-notes-action@31674bfa3a219e7c661fc0c5b7b3851c741b9965 # pin@v1.0.1
-        with:
-          tag-name: "v${{ steps.calculate-version.outputs.version-string }}"
-          token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Install semantic-release
+        run: |
+          npm install --no-save \
+            semantic-release \
+            @semantic-release/commit-analyzer \
+            @semantic-release/release-notes-generator \
+            @semantic-release/github \
+            conventional-changelog-conventionalcommits
 
-      - name: Create release
-        id: create-release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # pin@v3.0.1
-        with:
-          token: "${{ secrets.PAT }}"
-          name: "v${{ steps.calculate-version.outputs.version-string }}"
-          body: "${{ steps.release-notes.outputs.release-notes }}"
-          tag_name: "v${{ steps.calculate-version.outputs.version-string }}"
-          draft: false
-          prerelease: false
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+        run: npx semantic-release
