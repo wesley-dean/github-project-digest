@@ -25,7 +25,18 @@ INSTALLATION_TOKEN_URL = f"{GITHUB_API_ROOT}/app/installations/{{installation_id
 
 @dataclass(frozen=True)
 class GitHubAppConfig:
-    """Configuration needed to generate a GitHub App installation token."""
+    """@class GitHubAppConfig
+    @brief Configuration required to mint a GitHub App installation token.
+    @details
+    This dataclass keeps GitHub App credentials together without forcing GitHub
+    App authentication to replace PAT authentication.  The tool can therefore
+    remain easy to run locally with `GITHUB_TOKEN` while supporting a stronger
+    scheduled-automation model through short-lived installation tokens.
+
+    The private key may be supplied directly or through a file path.  Supporting
+    both forms keeps the tool usable in Jenkins, Docker, GitHub Actions, and
+    ordinary shell sessions where secret storage mechanisms differ.
+    """
 
     app_id: str | None = None
     installation_id: str | None = None
