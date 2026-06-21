@@ -19,7 +19,28 @@ from github_project_digest.render import render_digest
 
 
 def main() -> int:
-    """Run the MVP Project digest pipeline and write the result to STDOUT."""
+    """@fn main()
+    @brief Run the GitHub Project digest pipeline.
+    @details
+    This function is the command-line orchestration layer.  It deliberately keeps
+    the application flow linear: load configuration, resolve authentication,
+    fetch Project data, normalize GraphQL results, parse and apply the filter,
+    build digest sections and summary counts, render templates, optionally send
+    email, and finally write the requested output format to STDOUT.
+
+    Email delivery and STDOUT output are both performed when SMTP is configured.
+    That behavior keeps Jenkins and local runs observable even when the primary
+    delivery mechanism is email.  A failed pipeline returns a non-zero exit code
+    and writes a compact error message to STDERR so schedulers and CI systems can
+    detect failures without parsing normal digest output.
+
+    @returns Process-style exit code: `0` for success, `1` for failure.
+
+    @par Examples
+    @code
+    raise SystemExit(main())
+    @endcode
+    """
 
     try:
         config = load_config()
