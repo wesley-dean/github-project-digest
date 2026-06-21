@@ -1,4 +1,16 @@
-"""Command-line entrypoint for github-project-digest."""
+"""@file cli.py
+@brief Command-line entrypoint for github-project-digest.
+@details
+This module wires the application's documented pieces into one executable flow.
+It is intentionally thin: configuration, authentication, GitHub retrieval,
+normalization, filtering, digest preparation, rendering, and SMTP delivery all
+remain in their own modules so the entrypoint can describe the pipeline without
+owning each implementation detail.
+
+The CLI is designed for local shell usage, Docker execution, Jenkins jobs,
+GitHub Actions, and other schedulers.  It writes the selected output format to
+STDOUT and uses the process exit code to communicate success or failure.
+"""
 
 from __future__ import annotations
 
