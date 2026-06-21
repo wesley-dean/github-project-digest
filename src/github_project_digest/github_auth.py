@@ -19,7 +19,25 @@ from pathlib import Path
 import jwt
 import requests
 
+"""@var GITHUB_API_ROOT
+@brief Root URL for GitHub REST API requests.
+@details
+GitHub App installation tokens are created through the REST API even though the
+Project digest itself uses GraphQL for Project data.  Keeping the REST API root
+as a constant makes the authentication endpoint construction explicit and
+centralized.  The tool currently targets GitHub.com rather than GitHub
+Enterprise Server.
+"""
 GITHUB_API_ROOT = "https://api.github.com"
+
+"""@var INSTALLATION_TOKEN_URL
+@brief REST endpoint template used to create GitHub App installation tokens.
+@details
+GitHub Apps first authenticate as the App with a signed JWT, then exchange that
+JWT for an installation access token.  This template captures the second step of
+that flow.  The installation ID remains a runtime value because each installed
+copy of the App has its own installation identity and repository access scope.
+"""
 INSTALLATION_TOKEN_URL = f"{GITHUB_API_ROOT}/app/installations/{{installation_id}}/access_tokens"
 
 
