@@ -21,3 +21,5 @@ RUN python -m pip install --upgrade pip && \
 USER app
 
 ENTRYPOINT ["github-project-digest"]
+
+HEALTHCHECK none
