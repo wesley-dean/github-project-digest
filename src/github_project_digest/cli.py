@@ -1,4 +1,16 @@
-"""Command-line entrypoint for github-project-digest."""
+"""@file cli.py
+@brief Command-line entrypoint for github-project-digest.
+@details
+This module wires the application's documented pieces into one executable flow.
+It is intentionally thin: configuration, authentication, GitHub retrieval,
+normalization, filtering, digest preparation, rendering, and SMTP delivery all
+remain in their own modules so the entrypoint can describe the pipeline without
+owning each implementation detail.
+
+The CLI is designed for local shell usage, Docker execution, Jenkins jobs,
+GitHub Actions, and other schedulers.  It writes the selected output format to
+STDOUT and uses the process exit code to communicate success or failure.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +31,28 @@ from github_project_digest.render import render_digest
 
 
 def main() -> int:
-    """Run the MVP Project digest pipeline and write the result to STDOUT."""
+    """@fn main()
+    @brief Run the GitHub Project digest pipeline.
+    @details
+    This function is the command-line orchestration layer.  It deliberately keeps
+    the application flow linear: load configuration, resolve authentication,
+    fetch Project data, normalize GraphQL results, parse and apply the filter,
+    build digest sections and summary counts, render templates, optionally send
+    email, and finally write the requested output format to STDOUT.
+
+    Email delivery and STDOUT output are both performed when SMTP is configured.
+    That behavior keeps Jenkins and local runs observable even when the primary
+    delivery mechanism is email.  A failed pipeline returns a non-zero exit code
+    and writes a compact error message to STDERR so schedulers and CI systems can
+    detect failures without parsing normal digest output.
+
+    @returns Process-style exit code: `0` for success, `1` for failure.
+
+    @par Examples
+    @code
+    raise SystemExit(main())
+    @endcode
+    """
 
     try:
         config = load_config()

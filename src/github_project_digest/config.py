@@ -1,4 +1,17 @@
-"""Configuration loading for github-project-digest."""
+"""@file config.py
+@brief Load runtime configuration for github-project-digest.
+@details
+This module translates environment variables and optional `.env` values into a
+single immutable `Config` object.  The configuration layer intentionally keeps
+Jenkins, Docker, local shell usage, PAT authentication, GitHub App
+authentication, SMTP delivery, template selection, and Project filtering behind
+one consistent interface so the rest of the application can operate on typed
+values rather than raw process environment strings.
+
+The module also owns the `GITHUB_USER` parsing convention.  A colon-separated
+value identifies both the GitHub assignee and the optional email destination,
+while a bare login or `@me` keeps the tool in STDOUT-only mode.
+"""
 
 from __future__ import annotations
 
@@ -11,12 +24,30 @@ from github_project_digest.emailer import SmtpConfig
 from github_project_digest.github_auth import GitHubAppConfig
 
 
+"""@var DEFAULT_FILTER
+@brief Default Project filter used when no filter is supplied.
+@details
+The default filter encodes the primary daily-digest use case: show open issues
+from the current sprint that are assigned to the selected GitHub user.  The
+`@user` placeholder is resolved later against `GITHUB_USER` or the authenticated
+viewer, which lets the same default work for local single-user runs and Jenkins
+fan-out jobs.
+"""
 DEFAULT_FILTER = "sprint:@current assignee:@user is:issue state:open"
 
 
 @dataclass(frozen=True)
 class Config:
-    """Runtime configuration loaded from environment variables."""
+    """@class Config
+    @brief Immutable runtime configuration for one digest execution.
+    @details
+    `Config` is the boundary between the operating environment and the digest
+    pipeline.  The rest of the application receives typed values from this
+    dataclass instead of reading environment variables directly.  This keeps
+    command-line execution, Docker execution, Jenkins execution, PAT auth,
+    GitHub App auth, SMTP delivery, and template rendering aligned through one
+    configuration contract.
+    """
 
     github_token: str | None
     github_app: GitHubAppConfig
@@ -35,6 +66,23 @@ class Config:
 
 
 def _required(name: str) -> str:
+    """@fn _required(name)
+    @brief Return a required environment variable value.
+    @details
+    This helper centralizes required-setting validation so missing values fail
+    early with a clear message.  It treats empty strings as missing because an
+    empty setting is not meaningful for required values such as project owner,
+    SMTP host, or sender address.
+
+    @param name Environment variable name to read.
+    @returns The configured value.
+
+    @par Examples
+    @code
+    owner = _required("GITHUB_PROJECT_OWNER")
+    @endcode
+    """
+
     value = os.getenv(name)
     if not value:
         raise ValueError(f"Missing required environment variable: {name}")
@@ -42,6 +90,24 @@ def _required(name: str) -> str:
 
 
 def _int_env(name: str, default: int) -> int:
+    """@fn _int_env(name, default)
+    @brief Read an integer environment variable with a default.
+    @details
+    Environment variables arrive as strings, but several settings are numeric:
+    project number, page size, field-value limit, SMTP port, and SMTP timeout.
+    This helper keeps conversion and error reporting consistent across all of
+    those values.
+
+    @param name Environment variable name to read.
+    @param default Value to use when the variable is unset or empty.
+    @returns Parsed integer value.
+
+    @par Examples
+    @code
+    page_size = _int_env("GITHUB_PROJECT_PAGE_SIZE", 50)
+    @endcode
+    """
+
     value = os.getenv(name)
     if not value:
         return default
@@ -53,6 +119,23 @@ def _int_env(name: str, default: int) -> int:
 
 
 def _bool_env(name: str, default: bool) -> bool:
+    """@fn _bool_env(name, default)
+    @brief Read a boolean environment variable with a default.
+    @details
+    CI systems and shell environments commonly represent booleans using several
+    spellings.  This helper accepts common truthy and falsey values while still
+    rejecting ambiguous input so configuration mistakes are visible.
+
+    @param name Environment variable name to read.
+    @param default Value to use when the variable is unset or empty.
+    @returns Parsed boolean value.
+
+    @par Examples
+    @code
+    use_ssl = _bool_env("SMTP_USE_SSL", False)
+    @endcode
+    """
+
     value = os.getenv(name)
     if value is None or value == "":
         return default
@@ -65,6 +148,22 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 def _optional_env(name: str) -> str | None:
+    """@fn _optional_env(name)
+    @brief Read an optional environment variable.
+    @details
+    Optional values are normalized by stripping surrounding whitespace and
+    converting empty strings to `None`.  This keeps downstream configuration
+    checks focused on semantic presence rather than string cleanup.
+
+    @param name Environment variable name to read.
+    @returns A stripped string when present, otherwise `None`.
+
+    @par Examples
+    @code
+    token = _optional_env("GITHUB_TOKEN")
+    @endcode
+    """
+
     value = os.getenv(name)
     if value is None:
         return None
@@ -73,19 +172,43 @@ def _optional_env(name: str) -> str | None:
 
 
 def _selected_user_value() -> str:
-    """Return the requested digest assignee specification.
+    """@fn _selected_user_value()
+    @brief Return the requested digest assignee specification.
+    @details
+    The tool intentionally reads `GITHUB_USER` rather than the shell's ordinary
+    `USER` variable.  That choice prevents a login shell, Jenkins agent, or
+    container runtime from accidentally changing which GitHub assignee receives
+    a digest.  When `GITHUB_USER` is absent, `@me` keeps local use convenient by
+    deferring assignee resolution to the authenticated GitHub account.
 
-    GITHUB_USER may be either a GitHub login, @me, or a compound value in
-    the form username:email@example.com. The ordinary shell USER variable is
-    intentionally ignored so a login shell cannot accidentally change the
-    digest assignee.
+    @returns The configured GitHub user expression, or `@me` by default.
+
+    @par Examples
+    @code
+    raw_user = _selected_user_value()
+    @endcode
     """
 
     return _optional_env("GITHUB_USER") or "@me"
 
 
 def _split_user_and_email(value: str) -> tuple[str, str | None]:
-    """Split a GITHUB_USER value into GitHub login and optional destination email."""
+    """@fn _split_user_and_email(value)
+    @brief Split a GitHub user expression into assignee and recipient parts.
+    @details
+    `GITHUB_USER` supports both a bare assignee and a compound `assignee:email`
+    form.  The compound form lets shells and Jenkins jobs iterate over users
+    without introducing a separate recipients file.  Only the first colon is
+    significant so the parser remains predictable.
+
+    @param value Raw `GITHUB_USER` value.
+    @returns Tuple containing the GitHub login expression and optional email.
+
+    @par Examples
+    @code
+    user, email = _split_user_and_email("octocat:octocat@example.com")
+    @endcode
+    """
 
     user_value = (value or "@me").strip() or "@me"
     if ":" not in user_value:
@@ -98,6 +221,23 @@ def _split_user_and_email(value: str) -> tuple[str, str | None]:
 
 
 def _load_smtp_config(recipient: str | None) -> SmtpConfig | None:
+    """@fn _load_smtp_config(recipient)
+    @brief Build SMTP configuration when email delivery is requested.
+    @details
+    SMTP delivery is optional.  A missing recipient means the tool should render
+    to STDOUT only, which keeps local testing and dry shell runs useful.  When a
+    recipient is present, the required SMTP connection values are read and
+    validated here before the digest pipeline attempts delivery.
+
+    @param recipient Destination email address parsed from `GITHUB_USER`.
+    @returns `SmtpConfig` when delivery is enabled, otherwise `None`.
+
+    @par Examples
+    @code
+    smtp = _load_smtp_config(recipient_email)
+    @endcode
+    """
+
     if not recipient:
         return None
 
@@ -119,8 +259,27 @@ def _load_smtp_config(recipient: str | None) -> SmtpConfig | None:
         timeout=_int_env("SMTP_TIMEOUT", 30),
     )
 
+
 def load_config() -> Config:
-    """Load configuration from .env and the process environment."""
+    """@fn load_config()
+    @brief Load and normalize all runtime configuration.
+    @details
+    This function is the public entrypoint for configuration.  It loads `.env`
+    values, validates constrained settings, parses the selected GitHub user and
+    optional recipient email, and returns a single immutable `Config` instance
+    for the rest of the digest pipeline.
+
+    Environment access is intentionally concentrated here so GitHub access,
+    filtering, rendering, and email delivery can be tested with explicit values
+    rather than direct process-state dependencies.
+
+    @returns Fully populated runtime `Config`.
+
+    @par Examples
+    @code
+    config = load_config()
+    @endcode
+    """
 
     load_dotenv(override=True)
 

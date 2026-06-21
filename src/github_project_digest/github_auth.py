@@ -19,13 +19,42 @@ from pathlib import Path
 import jwt
 import requests
 
+"""@var GITHUB_API_ROOT
+@brief Root URL for GitHub REST API requests.
+@details
+GitHub App installation tokens are created through the REST API even though the
+Project digest itself uses GraphQL for Project data.  Keeping the REST API root
+as a constant makes the authentication endpoint construction explicit and
+centralized.  The tool currently targets GitHub.com rather than GitHub
+Enterprise Server.
+"""
 GITHUB_API_ROOT = "https://api.github.com"
+
+"""@var INSTALLATION_TOKEN_URL
+@brief REST endpoint template used to create GitHub App installation tokens.
+@details
+GitHub Apps first authenticate as the App with a signed JWT, then exchange that
+JWT for an installation access token.  This template captures the second step of
+that flow.  The installation ID remains a runtime value because each installed
+copy of the App has its own installation identity and repository access scope.
+"""
 INSTALLATION_TOKEN_URL = f"{GITHUB_API_ROOT}/app/installations/{{installation_id}}/access_tokens"
 
 
 @dataclass(frozen=True)
 class GitHubAppConfig:
-    """Configuration needed to generate a GitHub App installation token."""
+    """@class GitHubAppConfig
+    @brief Configuration required to mint a GitHub App installation token.
+    @details
+    This dataclass keeps GitHub App credentials together without forcing GitHub
+    App authentication to replace PAT authentication.  The tool can therefore
+    remain easy to run locally with `GITHUB_TOKEN` while supporting a stronger
+    scheduled-automation model through short-lived installation tokens.
+
+    The private key may be supplied directly or through a file path.  Supporting
+    both forms keeps the tool usable in Jenkins, Docker, GitHub Actions, and
+    ordinary shell sessions where secret storage mechanisms differ.
+    """
 
     app_id: str | None = None
     installation_id: str | None = None
@@ -34,7 +63,23 @@ class GitHubAppConfig:
 
     @property
     def configured(self) -> bool:
-        """Return True when enough GitHub App settings were provided."""
+        """@fn configured(self)
+        @brief Report whether GitHub App authentication can be attempted.
+        @details
+        GitHub App authentication requires an App ID, an installation ID, and a
+        private key source.  This property performs only a completeness check;
+        it does not validate that the credentials are correct or authorized.
+        That distinction keeps configuration selection separate from network
+        authentication failures.
+
+        @returns `True` when the required GitHub App fields are present.
+
+        @par Examples
+        @code
+        if app_config.configured:
+            token = create_installation_token(app_config)
+        @endcode
+        """
 
         return bool(
             self.app_id
@@ -44,10 +89,22 @@ class GitHubAppConfig:
 
 
 def resolve_github_token(token: str | None, app: GitHubAppConfig) -> str:
-    """Return a usable GitHub API token.
+    """@fn resolve_github_token(token, app)
+    @brief Return the token used for GitHub API calls.
+    @details
+    Direct tokens intentionally take precedence over GitHub App credentials.
+    This preserves the simplest local workflow while allowing scheduled jobs to
+    switch to GitHub App authentication by omitting `GITHUB_TOKEN` and supplying
+    App credentials instead.
 
-    A direct token wins when GITHUB_TOKEN is set. If no direct token is
-    provided, GitHub App credentials are used to mint an installation token.
+    @param token Direct GitHub token, usually from `GITHUB_TOKEN`.
+    @param app GitHub App configuration used when no direct token is supplied.
+    @returns GitHub API token suitable for REST or GraphQL requests.
+
+    @par Examples
+    @code
+    github_token = resolve_github_token(config.github_token, config.github_app)
+    @endcode
     """
 
     if token:
@@ -64,7 +121,26 @@ def resolve_github_token(token: str | None, app: GitHubAppConfig) -> str:
 
 
 def create_installation_token(app: GitHubAppConfig) -> str:
-    """Create a short-lived GitHub App installation access token."""
+    """@fn create_installation_token(app)
+    @brief Create a short-lived GitHub App installation access token.
+    @details
+    GitHub Apps authenticate in two steps: first by signing a JWT as the App,
+    then by exchanging that JWT for an installation token.  This function owns
+    the exchange step and returns the token used by the rest of the application.
+
+    The returned token is intentionally short-lived, making it a better fit for
+    scheduled automation than a long-lived PAT when the deployment environment
+    can safely store the App private key.
+
+    @param app GitHub App configuration containing App ID, installation ID, and
+               a private key source.
+    @returns Installation access token returned by GitHub.
+
+    @par Examples
+    @code
+    token = create_installation_token(app_config)
+    @endcode
+    """
 
     if not app.app_id or not app.installation_id:
         raise ValueError("GitHub App ID and installation ID are required")
@@ -98,7 +174,23 @@ def create_installation_token(app: GitHubAppConfig) -> str:
 
 
 def create_app_jwt(app_id: str, private_key: str) -> str:
-    """Create the signed JWT GitHub requires for App authentication."""
+    """@fn create_app_jwt(app_id, private_key)
+    @brief Create the signed JWT GitHub requires for App authentication.
+    @details
+    GitHub requires the App JWT to identify the App and expire quickly.  The
+    issued-at time is backdated slightly to tolerate small clock differences
+    between the runner and GitHub, while the expiration stays within GitHub's
+    short validity window.
+
+    @param app_id GitHub App identifier.
+    @param private_key PEM-formatted private key used to sign the JWT.
+    @returns Encoded JWT string.
+
+    @par Examples
+    @code
+    app_jwt = create_app_jwt(app_id, private_key)
+    @endcode
+    """
 
     now = int(time.time())
     payload = {
@@ -113,7 +205,22 @@ def create_app_jwt(app_id: str, private_key: str) -> str:
 
 
 def load_private_key(app: GitHubAppConfig) -> str:
-    """Load a GitHub App private key from text or a file path."""
+    """@fn load_private_key(app)
+    @brief Load a GitHub App private key from text or a file path.
+    @details
+    Deployment environments handle multiline secrets differently.  Inline text
+    is convenient for some secret stores, while file paths are safer and easier
+    for systems such as Jenkins secret files or mounted Docker secrets.  This
+    helper supports both without changing the authentication flow.
+
+    @param app GitHub App configuration containing one private key source.
+    @returns PEM-formatted private key text.
+
+    @par Examples
+    @code
+    private_key = load_private_key(app_config)
+    @endcode
+    """
 
     if app.private_key:
         return _normalize_private_key(app.private_key)
@@ -125,11 +232,21 @@ def load_private_key(app: GitHubAppConfig) -> str:
 
 
 def _normalize_private_key(value: str) -> str:
-    """Normalize private-key text supplied through an environment variable.
+    """@fn _normalize_private_key(value)
+    @brief Normalize private-key text supplied through an environment variable.
+    @details
+    Some CI systems preserve multiline secrets as literal backslash-n sequences.
+    PyJWT expects real newline characters in PEM material, so this helper turns
+    that escaped representation back into a usable private key while leaving
+    already-multiline values unchanged.
 
-    Jenkins and other CI systems often store multiline secrets with literal
-    backslash-n sequences. Convert those into real newlines so PyJWT can parse
-    the PEM document.
+    @param value Raw private key value from configuration.
+    @returns Normalized private key text.
+
+    @par Examples
+    @code
+    private_key = _normalize_private_key(raw_private_key)
+    @endcode
     """
 
     stripped = value.strip()
