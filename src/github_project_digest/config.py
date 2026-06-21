@@ -57,6 +57,23 @@ class Config:
 
 
 def _required(name: str) -> str:
+    """@fn _required(name)
+    @brief Return a required environment variable value.
+    @details
+    This helper centralizes required-setting validation so missing values fail
+    early with a clear message.  It treats empty strings as missing because an
+    empty setting is not meaningful for required values such as project owner,
+    SMTP host, or sender address.
+
+    @param name Environment variable name to read.
+    @returns The configured value.
+
+    @par Examples
+    @code
+    owner = _required("GITHUB_PROJECT_OWNER")
+    @endcode
+    """
+
     value = os.getenv(name)
     if not value:
         raise ValueError(f"Missing required environment variable: {name}")
@@ -64,6 +81,24 @@ def _required(name: str) -> str:
 
 
 def _int_env(name: str, default: int) -> int:
+    """@fn _int_env(name, default)
+    @brief Read an integer environment variable with a default.
+    @details
+    Environment variables arrive as strings, but several settings are numeric:
+    project number, page size, field-value limit, SMTP port, and SMTP timeout.
+    This helper keeps conversion and error reporting consistent across all of
+    those values.
+
+    @param name Environment variable name to read.
+    @param default Value to use when the variable is unset or empty.
+    @returns Parsed integer value.
+
+    @par Examples
+    @code
+    page_size = _int_env("GITHUB_PROJECT_PAGE_SIZE", 50)
+    @endcode
+    """
+
     value = os.getenv(name)
     if not value:
         return default
@@ -75,6 +110,23 @@ def _int_env(name: str, default: int) -> int:
 
 
 def _bool_env(name: str, default: bool) -> bool:
+    """@fn _bool_env(name, default)
+    @brief Read a boolean environment variable with a default.
+    @details
+    CI systems and shell environments commonly represent booleans using several
+    spellings.  This helper accepts common truthy and falsey values while still
+    rejecting ambiguous input so configuration mistakes are visible.
+
+    @param name Environment variable name to read.
+    @param default Value to use when the variable is unset or empty.
+    @returns Parsed boolean value.
+
+    @par Examples
+    @code
+    use_ssl = _bool_env("SMTP_USE_SSL", False)
+    @endcode
+    """
+
     value = os.getenv(name)
     if value is None or value == "":
         return default
@@ -87,6 +139,22 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 def _optional_env(name: str) -> str | None:
+    """@fn _optional_env(name)
+    @brief Read an optional environment variable.
+    @details
+    Optional values are normalized by stripping surrounding whitespace and
+    converting empty strings to `None`.  This keeps downstream configuration
+    checks focused on semantic presence rather than string cleanup.
+
+    @param name Environment variable name to read.
+    @returns A stripped string when present, otherwise `None`.
+
+    @par Examples
+    @code
+    token = _optional_env("GITHUB_TOKEN")
+    @endcode
+    """
+
     value = os.getenv(name)
     if value is None:
         return None
