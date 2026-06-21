@@ -1,4 +1,18 @@
-"""Configuration loading for github-project-digest."""
+"""@file config.py
+@brief Load runtime configuration for github-project-digest.
+@details
+This module translates environment variables and optional `.env` values into a
+single immutable `Config` object.  The configuration layer intentionally keeps
+Jenkins, Docker, local shell usage, PAT authentication, GitHub App
+authentication, SMTP delivery, template selection, and Project filtering behind
+one consistent interface so the rest of the application can operate on typed
+values rather than raw process environment strings.
+
+The module also owns the `GITHUB_USER` parsing convention.  A value such as
+`wesley-dean:wesdean@example.com` identifies both the GitHub assignee and the
+optional email destination, while `wesley-dean` or `@me` keeps the tool in
+STDOUT-only mode.
+"""
 
 from __future__ import annotations
 
