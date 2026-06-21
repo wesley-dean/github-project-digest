@@ -8,7 +8,20 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ProjectFilter:
-    """Supported subset of GitHub Project-ish filter syntax."""
+    """@class ProjectFilter
+    @brief Parsed representation of the supported Project digest filter subset.
+    @details
+    `ProjectFilter` captures the small, intentional subset of GitHub
+    Project-like filter syntax that this tool supports today.  The class avoids
+    pretending to be a complete implementation of GitHub's Project search
+    language.  Instead, it records the specific fields the digest pipeline needs
+    in order to decide whether a normalized Project item belongs in one user's
+    daily digest.
+
+    The original raw terms are preserved because unsupported or future filter
+    terms may still be useful for debugging, logging, or later expansion without
+    changing the public shape of the parsed filter object.
+    """
 
     assignee: str | None = None
     content_type: str | None = None
