@@ -60,6 +60,7 @@ Responsibilities:
 - Parse configuration
 - Validate required values
 - Parse `GITHUB_USER`
+- Load due-date marker thresholds
 - Build SMTP configuration
 - Select GitHub authentication mode
 
@@ -133,6 +134,8 @@ Responsibilities:
 - Issue classification
 - Workflow grouping
 - Due-date interpretation
+- Due-date marker threshold application
+- Assignee display preparation
 - Summary generation
 - Sorting
 
@@ -202,6 +205,7 @@ Templates should not:
 - Perform filtering
 - Perform sorting
 - Compute due-date state
+- Apply due-date marker thresholds
 - Classify issues
 
 Those responsibilities belong in Python code.
@@ -227,12 +231,60 @@ Meaning of symbols:
 | --- | --- |
 | 💥 | Overdue |
 | 🚨 | Due today |
-| ⚠️ | Due in 1-2 days |
-| 📅 | Due in 3-7 days |
-| 💤 | Due in more than 7 days |
+| ⚠️ | Due soon |
+| 📅 | Upcoming |
+| 💤 | Later |
 | ☐ | No due date |
 
 These symbols are part of the user-facing digest vocabulary.
+
+Future due-date thresholds are runtime configuration:
+
+```text
+DUE_SOON_DAYS=2
+DUE_UPCOMING_DAYS=7
+```
+
+Defaults preserve the original behavior:
+
+- `DUE_SOON_DAYS=2`: issues due in 1-2 days use ⚠️.
+- `DUE_UPCOMING_DAYS=7`: issues due in 3-7 days use 📅.
+- Issues due after `DUE_UPCOMING_DAYS` use 💤.
+
+Validation rules:
+
+- `DUE_SOON_DAYS` must be greater than or equal to `0`.
+- `DUE_UPCOMING_DAYS` must be greater than or equal to `DUE_SOON_DAYS`.
+
+Configuration loading and validation belong in `config.py`.  Marker selection and due-state semantics belong in `digest.py`.  Templates should render prepared marker and due-state values rather than deriving urgency themselves.
+
+### Assignee Display Semantics
+
+Assignee presentation is prepared in Python rather than computed in templates.
+
+Prepared issue data includes:
+
+- Assignee display metadata
+- Current-user identification
+- Unassigned fallback handling
+- Markdown-safe assignee rendering for text output
+
+Templates should render prepared assignee data and should not determine ownership semantics themselves.
+
+User-facing behavior:
+
+- Multiple assignees are rendered as a comma-separated list.
+- Issues with no assignees display `unassigned`.
+- The selected digest user is visually emphasized when present in the assignee list.
+- Repository, assignee, and due-date metadata are displayed in that order.
+
+Examples:
+
+```text
+repository • assignee • due: YYYY-MM-DD
+repository • assignee1, assignee2 • due: YYYY-MM-DD
+repository • unassigned • due: YYYY-MM-DD
+```
 
 ## User Selection
 
@@ -301,7 +353,8 @@ Tests should validate:
 2. Filtering behavior
 3. Digest classification
 4. Due-date handling
-5. Rendering expectations
+5. Configurable due-date threshold boundaries
+6. Rendering expectations
 
 Tests should avoid unnecessary dependency on GitHub APIs.
 
