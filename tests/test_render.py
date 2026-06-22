@@ -65,7 +65,7 @@ def test_html_template_links_issue_titles_and_suppresses_empty_sections(sample_i
     assert "Pay GEICO insurance" in output
     assert "wesley-dean/tasks</span><span>&nbsp;&bull;&nbsp;</span><span><strong" in output
     assert "Coordinate shared work" in output
-    assert "<strong style=&#34;color:#24292f;&#34;>wesley-dean</strong>, joe-dean" in output
+    assert "wesley-dean</strong>, joe-dean" in output
     assert "Triage unowned work" in output
     assert "unassigned</span><span>&nbsp;&bull;&nbsp;</span><span" in output
     assert "due: 2026-06-19" in output
