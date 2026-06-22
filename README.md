@@ -140,7 +140,7 @@ GITHUB_USER=octocat:octocat@example.com
 This makes shell iteration straightforward:
 
 ```bash
-for GITHUB_USER in wesley-dean:wesdean@kdaweb.com brendadowdean:brenda@kdaweb.com; do
+for GITHUB_USER in wesley-dean:wesley-dean@example.com joe-dean:joe-dean@example.com; do
   github-project-digest
 done
 ```
@@ -236,7 +236,7 @@ Run for a specific GitHub assignee and destination email:
 ```bash
 podman run --rm \
   --env-file .env \
-  -e GITHUB_USER='wesley-dean:wesdean@kdaweb.com' \
+  -e GITHUB_USER='wesley-dean:wesley-dean@example.com' \
   github-project-digest
 ```
 
@@ -244,8 +244,8 @@ Iterate across multiple users from the shell:
 
 ```bash
 for GITHUB_USER in \
-  wesley-dean:wesdean@kdaweb.com \
-  brendadowdean:brenda@kdaweb.com
+  wesley-dean:wesley-dean@example.com \
+  joe-dean:joe-dean@example.com
 do
   podman run --rm \
     --env-file .env \
