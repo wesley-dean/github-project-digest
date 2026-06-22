@@ -9,7 +9,7 @@ Summary: {{ summary.total }} issue{{ '' if summary.total == 1 else 's' }}{% if s
 {% for section in sections if section.issues %}
 {{ section.title }} ({{ section.count }})
 {% for issue in section.issues %}
-- {{ issue.due_marker }} {{ issue.issue_ref ~ ' ' if issue.issue_ref else '' }}{{ issue.title }} • {% if issue.assignees %}{% for issue_assignee in issue.assignees %}{% if not loop.first %}, {% endif %}{% if issue_assignee == assignee.login %}**{{ issue_assignee }}**{% else %}{{ issue_assignee }}{% endif %}{% endfor %}{% else %}unassigned{% endif %}{{ ' • due: ' ~ issue.due_date if issue.due_date else '' }}{{ ' - ' ~ issue.url if issue.url else '' }}
+- {{ issue.due_marker }} {{ issue.issue_ref ~ ' ' if issue.issue_ref else '' }}{{ issue.title }} • {{ issue.assignees_markdown }}{{ ' • due: ' ~ issue.due_date if issue.due_date else '' }}{{ ' - ' ~ issue.url if issue.url else '' }}
 {% endfor %}
 
 {% endfor %}
