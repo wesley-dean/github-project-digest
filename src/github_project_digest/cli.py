@@ -70,7 +70,7 @@ def main() -> int:
         normalized = normalize_project(raw)
         project_filter = parse_filter(config.filter_query, assignee_login)
         issues = apply_filter(normalized["items"], project_filter)
-        sections = build_digest_sections(issues)
+        sections = build_digest_sections(issues, current_assignee=assignee_login)
         summary = build_digest_summary(issues)
 
         context: dict[str, Any] = {
