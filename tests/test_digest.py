@@ -14,15 +14,35 @@ def test_prepare_issue_due_markers(today) -> None:
 
     overdue = prepare_issue({**base, "fields": {"Status": "Open", "Due Date": "2026-06-19"}}, today)
     due_today = prepare_issue({**base, "fields": {"Status": "Open", "Due Date": "2026-06-20"}}, today)
-    future = prepare_issue({**base, "fields": {"Status": "Open", "Due Date": "2026-06-21"}}, today)
+    soon_one_day = prepare_issue({**base, "fields": {"Status": "Open", "Due Date": "2026-06-21"}}, today)
+    soon_two_days = prepare_issue({**base, "fields": {"Status": "Open", "Due Date": "2026-06-22"}}, today)
+    upcoming_three_days = prepare_issue({**base, "fields": {"Status": "Open", "Due Date": "2026-06-23"}}, today)
+    upcoming_seven_days = prepare_issue({**base, "fields": {"Status": "Open", "Due Date": "2026-06-27"}}, today)
+    later = prepare_issue({**base, "fields": {"Status": "Open", "Due Date": "2026-06-28"}}, today)
     unscheduled = prepare_issue(base, today)
 
+    assert overdue["days_remaining"] == -1
     assert overdue["due_marker"] == "💥"
     assert overdue["due_state"] == "overdue"
+    assert due_today["days_remaining"] == 0
     assert due_today["due_marker"] == "🚨"
     assert due_today["due_state"] == "today"
-    assert future["due_marker"] == "⚠️"
-    assert future["due_state"] == "upcoming"
+    assert soon_one_day["days_remaining"] == 1
+    assert soon_one_day["due_marker"] == "⚠️"
+    assert soon_one_day["due_state"] == "soon"
+    assert soon_two_days["days_remaining"] == 2
+    assert soon_two_days["due_marker"] == "⚠️"
+    assert soon_two_days["due_state"] == "soon"
+    assert upcoming_three_days["days_remaining"] == 3
+    assert upcoming_three_days["due_marker"] == "📅"
+    assert upcoming_three_days["due_state"] == "upcoming"
+    assert upcoming_seven_days["days_remaining"] == 7
+    assert upcoming_seven_days["due_marker"] == "📅"
+    assert upcoming_seven_days["due_state"] == "upcoming"
+    assert later["days_remaining"] == 8
+    assert later["due_marker"] == "💤"
+    assert later["due_state"] == "later"
+    assert unscheduled["days_remaining"] is None
     assert unscheduled["due_marker"] == "☐"
     assert unscheduled["due_state"] == "none"
 
