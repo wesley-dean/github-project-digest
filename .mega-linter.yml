@@ -53,6 +53,10 @@ REPOSITORY_CHECKOV_ARGUMENTS: "--download-external-modules true"
 # make sure Common Platform Enumerations (CPEs) are present
 REPOSITORY_GRYPE_ARGUMENTS: "--add-cpes-if-none"
 
+# pytest-style assertions are expected in test modules; Bandit B101 is useful
+# for application code but noisy for tests.
+PYTHON_BANDIT_FILTER_REGEX_EXCLUDE: "tests/test_.*\\.py"
+
 # make sure that MegaLinter's reports folder is clean at the start of each
 # run so that tools like DefectDojo don't get confused by old reports
 CLEAR_REPORT_FOLDER: true
