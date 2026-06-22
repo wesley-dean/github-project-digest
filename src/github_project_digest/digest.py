@@ -21,20 +21,21 @@ SECTION_DEFINITIONS = [
 ]
 
 """@var UPCOMING_SOON_DAYS
-@brief Maximum number of remaining days treated as urgent upcoming work.
+@brief Default maximum number of remaining days treated as urgent upcoming work.
 @details
-Issues due within this many days use the warning marker.  The threshold keeps
-near-term work visually prominent without treating every future due date as
-urgent.
+Issues due within this many days use the warning marker when no runtime
+threshold is provided.  Runtime configuration can override this value through
+`DUE_SOON_DAYS` while direct unit-level callers keep the historical default.
 """
 UPCOMING_SOON_DAYS = 2
 
 """@var UPCOMING_WINDOW_DAYS
-@brief Maximum number of remaining days treated as normal upcoming work.
+@brief Default maximum number of remaining days treated as normal upcoming work.
 @details
 Issues due after the urgent upcoming window and within this many days use the
-calendar marker.  Later work uses the lower-urgency later marker so digest
-readers can distinguish near-term scheduling from longer-range planning.
+calendar marker when no runtime threshold is provided.  Runtime configuration can
+override this value through `DUE_UPCOMING_DAYS` while direct unit-level callers
+keep the historical default.
 """
 UPCOMING_WINDOW_DAYS = 7
 
@@ -49,9 +50,13 @@ UNASSIGNED_LABEL = "unassigned"
 
 
 def build_digest_sections(
-    items: list[dict[str, Any]], today: date | None = None, current_assignee: str | None = None
+    items: list[dict[str, Any]],
+    today: date | None = None,
+    current_assignee: str | None = None,
+    due_soon_days: int = UPCOMING_SOON_DAYS,
+    due_upcoming_days: int = UPCOMING_WINDOW_DAYS,
 ) -> list[dict[str, Any]]:
-    """@fn build_digest_sections(items, today=None, current_assignee=None)
+    """@fn build_digest_sections(items, today=None, current_assignee=None, due_soon_days=UPCOMING_SOON_DAYS, due_upcoming_days=UPCOMING_WINDOW_DAYS)
     @brief Group, prepare, and sort issues for digest templates.
     @details
     This function is the main bridge between normalized Project items and the
@@ -66,11 +71,15 @@ def build_digest_sections(
 
     The selected assignee login is passed through to item preparation so the
     rendered digest can visually emphasize issues assigned to the current user
-    when broader filters include work owned by multiple people.
+    when broader filters include work owned by multiple people.  Due marker
+    thresholds are also passed through so runtime configuration can tune the
+    soon and upcoming windows without changing template code.
 
     @param items Normalized and filtered Project items.
     @param today Optional date used for deterministic tests and due-date logic.
     @param current_assignee Optional GitHub login to highlight in assignee lists.
+    @param due_soon_days Maximum days remaining that should use the warning marker.
+    @param due_upcoming_days Maximum days remaining that should use the calendar marker.
     @returns Ordered section dictionaries containing titles, counts, and issues.
 
     @par Examples
@@ -83,7 +92,13 @@ def build_digest_sections(
     grouped: dict[str, list[dict[str, Any]]] = {section["key"]: [] for section in SECTION_DEFINITIONS}
 
     for item in items:
-        prepared = prepare_issue(item, today, current_assignee=current_assignee)
+        prepared = prepare_issue(
+            item,
+            today,
+            current_assignee=current_assignee,
+            due_soon_days=due_soon_days,
+            due_upcoming_days=due_upcoming_days,
+        )
         section_key = classify_issue(prepared)
         if section_key in grouped:
             grouped[section_key].append(prepared)
@@ -144,8 +159,14 @@ def build_digest_summary(items: list[dict[str, Any]], today: date | None = None)
     }
 
 
-def prepare_issue(item: dict[str, Any], today: date, current_assignee: str | None = None) -> dict[str, Any]:
-    """@fn prepare_issue(item, today, current_assignee=None)
+def prepare_issue(
+    item: dict[str, Any],
+    today: date,
+    current_assignee: str | None = None,
+    due_soon_days: int = UPCOMING_SOON_DAYS,
+    due_upcoming_days: int = UPCOMING_WINDOW_DAYS,
+) -> dict[str, Any]:
+    """@fn prepare_issue(item, today, current_assignee=None, due_soon_days=UPCOMING_SOON_DAYS, due_upcoming_days=UPCOMING_WINDOW_DAYS)
     @brief Add template-friendly status, due-date, marker, assignee, and reference values.
     @details
     Normalized Project items still contain raw field values.  This function adds
@@ -155,9 +176,10 @@ def prepare_issue(item: dict[str, Any], today: date, current_assignee: str | Non
 
     The due markers encode the digest's urgency model from the number of days
     remaining before the due date: explosion for overdue work, red alert for
-    work due today, yellow warning for work due within two days, calendar for
-    work due within seven days, sleepy face for later work, and an empty
-    checkbox for work without a due date.
+    work due today, yellow warning for work due within the configured soon
+    threshold, calendar for work due within the configured upcoming threshold,
+    sleepy face for later work, and an empty checkbox for work without a due
+    date.
 
     Assignee preparation keeps ownership semantics in Python instead of making
     templates decide which user is the selected user.  Templates still choose how
@@ -166,6 +188,8 @@ def prepare_issue(item: dict[str, Any], today: date, current_assignee: str | Non
     @param item Normalized Project item.
     @param today Date used to compare due dates.
     @param current_assignee Optional GitHub login to mark as the current user.
+    @param due_soon_days Maximum days remaining that should use the warning marker.
+    @param due_upcoming_days Maximum days remaining that should use the calendar marker.
     @returns Copy of the item with additional digest-specific fields.
 
     @par Examples
@@ -179,7 +203,7 @@ def prepare_issue(item: dict[str, Any], today: date, current_assignee: str | Non
     status = _first_present_field(fields, "Status", "status")
     due_date_obj = _parse_date(due_date)
     days_remaining = (due_date_obj - today).days if due_date_obj else None
-    due_marker, due_state = _due_marker_for_days_remaining(days_remaining)
+    due_marker, due_state = _due_marker_for_days_remaining(days_remaining, due_soon_days, due_upcoming_days)
     assignee_display = _prepare_assignee_display(item.get("assignees"), current_assignee)
 
     repository = str(item.get("repository") or "")
@@ -235,8 +259,12 @@ def classify_issue(item: dict[str, Any]) -> str:
     return "open"
 
 
-def _due_marker_for_days_remaining(days_remaining: int | None) -> tuple[str, str]:
-    """@fn _due_marker_for_days_remaining(days_remaining)
+def _due_marker_for_days_remaining(
+    days_remaining: int | None,
+    due_soon_days: int = UPCOMING_SOON_DAYS,
+    due_upcoming_days: int = UPCOMING_WINDOW_DAYS,
+) -> tuple[str, str]:
+    """@fn _due_marker_for_days_remaining(days_remaining, due_soon_days=UPCOMING_SOON_DAYS, due_upcoming_days=UPCOMING_WINDOW_DAYS)
     @brief Return the due marker and due-state label for a relative due date.
     @details
     The digest vocabulary is based on days remaining rather than a raw future
@@ -246,6 +274,8 @@ def _due_marker_for_days_remaining(days_remaining: int | None) -> tuple[str, str
 
     @param days_remaining Number of days until the issue is due, or `None` when
         the issue has no due date.
+    @param due_soon_days Maximum days remaining that should use the warning marker.
+    @param due_upcoming_days Maximum days remaining that should use the calendar marker.
     @returns Tuple containing the user-facing emoji marker and stable due-state
         label consumed by templates and structured output.
 
@@ -261,9 +291,9 @@ def _due_marker_for_days_remaining(days_remaining: int | None) -> tuple[str, str
         return "💥", "overdue"
     if days_remaining == 0:
         return "🚨", "today"
-    if days_remaining <= UPCOMING_SOON_DAYS:
+    if days_remaining <= due_soon_days:
         return "⚠️", "soon"
-    if days_remaining <= UPCOMING_WINDOW_DAYS:
+    if days_remaining <= due_upcoming_days:
         return "📅", "upcoming"
     return "💤", "later"
 
