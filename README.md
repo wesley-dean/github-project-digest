@@ -32,7 +32,7 @@ Edit `.env`.
 
 ```dotenv
 # Option 1: direct token/PAT. This takes precedence when set.
-GITHUB_TOKEN=ghp_replace_me
+GITHUB_TOKEN=replace_me
 
 # Option 2: GitHub App authentication. Used only when GITHUB_TOKEN is empty.
 GITHUB_APP_ID=
@@ -46,6 +46,8 @@ GITHUB_PROJECT_OWNER_TYPE=organization
 GITHUB_USER=@me
 GITHUB_PROJECT_FILTER=sprint:@current assignee:@user is:issue state:open
 DIGEST_OUTPUT_FORMAT=text
+DUE_SOON_DAYS=2
+DUE_UPCOMING_DAYS=7
 ```
 
 For a user-owned Project, set:
@@ -89,7 +91,7 @@ The tool supports two GitHub authentication modes.
 The simplest mode is a direct token/PAT:
 
 ```dotenv
-GITHUB_TOKEN=ghp_replace_me
+GITHUB_TOKEN=replace_me
 ```
 
 For scheduled automation, you can instead use a GitHub App installation. Leave `GITHUB_TOKEN` empty and provide App credentials:
@@ -101,14 +103,7 @@ GITHUB_APP_INSTALLATION_ID=98765432
 GITHUB_APP_PRIVATE_KEY_FILE=/run/secrets/github-app.pem
 ```
 
-Or provide the PEM text directly, which is useful for CI systems that store secrets as text. Literal `\n` sequences are converted to real newlines before signing the JWT.
-
-```dotenv
-GITHUB_TOKEN=
-GITHUB_APP_ID=123456
-GITHUB_APP_INSTALLATION_ID=98765432
-GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----
-```
+You may also provide the PEM text directly through `GITHUB_APP_PRIVATE_KEY`, which is useful for CI systems that store secrets as text. Literal `\n` sequences are converted to real newlines before signing the JWT.
 
 If both are set, `GITHUB_TOKEN` wins. The GitHub App mode generates a short-lived installation token and then uses the same GraphQL code path as PAT mode.
 
@@ -194,10 +189,34 @@ Date markers:
 
 - 💥 overdue
 - 🚨 due today
-- ⚠️ due in 1-2 days
-- 📅 due in 3-7 days
-- 💤 due in more than 7 days
+- ⚠️ due in 1-2 days by default
+- 📅 due in 3-7 days by default
+- 💤 due in more than 7 days by default
 - ☐ no due date
+
+### Configuring due-date thresholds
+
+The future due-date marker thresholds are configurable at runtime:
+
+```dotenv
+DUE_SOON_DAYS=2
+DUE_UPCOMING_DAYS=7
+```
+
+`DUE_SOON_DAYS` controls the final day that uses the warning marker.  With the default value of `2`, issues due in 1 or 2 days use ⚠️.
+
+`DUE_UPCOMING_DAYS` controls the final day that uses the calendar marker.  With the default value of `7`, issues due in 3 through 7 days use 📅, and issues due in more than 7 days use 💤.
+
+For example, this configuration widens the warning and upcoming windows:
+
+```dotenv
+DUE_SOON_DAYS=5
+DUE_UPCOMING_DAYS=14
+```
+
+With that configuration, issues due in 1-5 days use ⚠️, issues due in 6-14 days use 📅, and issues due in more than 14 days use 💤.
+
+`DUE_SOON_DAYS` must be greater than or equal to `0`, and `DUE_UPCOMING_DAYS` must be greater than or equal to `DUE_SOON_DAYS`.
 
 If your filter includes `state:open` or `status:open`, closed issues will normally be excluded before the Closed section is built. Remove that filter term if you want the digest to include closed/completed items.
 
