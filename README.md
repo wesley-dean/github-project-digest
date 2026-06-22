@@ -144,6 +144,76 @@ The ordinary shell `USER` variable is intentionally ignored so local shells and 
 
 The Project item query accepts the resolved assignee login as the GraphQL variable `$assigneeLogin`. GitHub Project v2 does not expose the same full filter syntax as the Project UI through this query, so this script still applies the supported MVP filter locally after fetching the Project items.
 
+## Example use cases
+
+Although `github-project-digest` was originally built to provide individual contributors with a daily reminder of work assigned to them, many teams use GitHub Projects as a lightweight planning and coordination system. The digest can provide value to several different audiences depending on how it is configured.
+
+### Individual contributor
+
+A developer can receive a daily reminder of open work assigned to them in the current sprint:
+
+```dotenv
+GITHUB_USER=@me
+GITHUB_PROJECT_FILTER=sprint:@current assignee:@user is:issue state:open
+```
+
+This configuration can help answer:
+
+- What should I work on today?
+- Which assigned items are due soon?
+- Which assigned items are overdue?
+- Which assigned tasks have no due date?
+
+### Product Owner or Project Manager
+
+A Product Owner or Project Manager may want visibility into the overall state of a sprint rather than only their own assignments. Removing the assignee filter produces a broader project-status digest:
+
+```dotenv
+GITHUB_USER=project-manager
+GITHUB_PROJECT_FILTER=sprint:@current is:issue state:open
+```
+
+This configuration can help highlight:
+
+- Blocked work
+- Overdue work
+- Upcoming deadlines
+- Unassigned issues
+- Distribution of work across the team
+
+Many teams schedule this digest to arrive each morning before stand-up meetings, backlog refinement, sprint planning, or stakeholder check-ins.
+
+### Technical lead
+
+A technical lead may prefer a team-wide operational view that includes issues and pull requests in the current sprint:
+
+```dotenv
+GITHUB_USER=tech-lead
+GITHUB_PROJECT_FILTER=sprint:@current state:open
+```
+
+This configuration can help identify:
+
+- Work that has stalled
+- Blocked issues requiring intervention
+- Large concentrations of work assigned to a single contributor
+- Items approaching due dates
+- Open pull requests that are represented as Project items
+
+The digest serves as an early warning system that helps leaders focus attention where it is most needed.
+
+### Future pull request and review digests
+
+The current implementation focuses on GitHub Project items. The same digest model could potentially be extended in the future to support additional GitHub workflows, such as:
+
+- Open pull requests
+- Review requests
+- Stale pull requests
+- Merge-ready pull requests
+- Team review queues
+
+Those capabilities are not currently implemented as standalone digest sources, but the existing normalization, filtering, rendering, and delivery pipeline provides a natural foundation for them.
+
 ## Supported MVP filter terms
 
 This is not a full clone of GitHub Project UI search syntax. It supports only:
