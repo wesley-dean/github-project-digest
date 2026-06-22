@@ -4,9 +4,9 @@
 This module translates environment variables and optional `.env` values into a
 single immutable `Config` object.  The configuration layer intentionally keeps
 Jenkins, Docker, local shell usage, PAT authentication, GitHub App
-authentication, SMTP delivery, template selection, and Project filtering behind
-one consistent interface so the rest of the application can operate on typed
-values rather than raw process environment strings.
+authentication, SMTP delivery, template selection, Project filtering, and due
+marker thresholds behind one consistent interface so the rest of the application
+can operate on typed values rather than raw process environment strings.
 
 The module also owns the `GITHUB_USER` parsing convention.  A colon-separated
 value identifies both the GitHub assignee and the optional email destination,
@@ -35,6 +35,22 @@ fan-out jobs.
 """
 DEFAULT_FILTER = "sprint:@current assignee:@user is:issue state:open"
 
+"""@var DEFAULT_DUE_SOON_DAYS
+@brief Default maximum number of remaining days treated as urgent upcoming work.
+@details
+The default preserves the original digest behavior: issues due in one or two
+days use the warning marker unless overridden by `DUE_SOON_DAYS`.
+"""
+DEFAULT_DUE_SOON_DAYS = 2
+
+"""@var DEFAULT_DUE_UPCOMING_DAYS
+@brief Default maximum number of remaining days treated as normal upcoming work.
+@details
+The default preserves the original digest behavior: issues due in three through
+seven days use the calendar marker unless overridden by `DUE_UPCOMING_DAYS`.
+"""
+DEFAULT_DUE_UPCOMING_DAYS = 7
+
 
 @dataclass(frozen=True)
 class Config:
@@ -45,8 +61,8 @@ class Config:
     pipeline.  The rest of the application receives typed values from this
     dataclass instead of reading environment variables directly.  This keeps
     command-line execution, Docker execution, Jenkins execution, PAT auth,
-    GitHub App auth, SMTP delivery, and template rendering aligned through one
-    configuration contract.
+    GitHub App auth, SMTP delivery, due marker thresholds, and template rendering
+    aligned through one configuration contract.
     """
 
     github_token: str | None
@@ -62,6 +78,8 @@ class Config:
     html_template: str
     page_size: int
     field_value_limit: int
+    due_soon_days: int
+    due_upcoming_days: int
     smtp: SmtpConfig | None
 
 
@@ -94,9 +112,9 @@ def _int_env(name: str, default: int) -> int:
     @brief Read an integer environment variable with a default.
     @details
     Environment variables arrive as strings, but several settings are numeric:
-    project number, page size, field-value limit, SMTP port, and SMTP timeout.
-    This helper keeps conversion and error reporting consistent across all of
-    those values.
+    project number, page size, field-value limit, SMTP port, SMTP timeout, and
+    due marker thresholds.  This helper keeps conversion and error reporting
+    consistent across all of those values.
 
     @param name Environment variable name to read.
     @param default Value to use when the variable is unset or empty.
@@ -115,7 +133,6 @@ def _int_env(name: str, default: int) -> int:
         return int(value)
     except ValueError as exc:
         raise ValueError(f"{name} must be an integer") from exc
-
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -169,6 +186,37 @@ def _optional_env(name: str) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def _load_due_thresholds() -> tuple[int, int]:
+    """@fn _load_due_thresholds()
+    @brief Load and validate due marker threshold settings.
+    @details
+    Due marker thresholds control when future due dates move from the warning
+    marker to the calendar marker and then to the later marker.  They are runtime
+    settings so users can tune digest urgency without changing source code.
+
+    The soon threshold must be greater than or equal to zero, and the upcoming
+    threshold must be greater than or equal to the soon threshold.  Those rules
+    keep the due-date ranges ordered and prevent unreachable marker states.
+
+    @returns Tuple containing `due_soon_days` and `due_upcoming_days`.
+
+    @par Examples
+    @code
+    due_soon_days, due_upcoming_days = _load_due_thresholds()
+    @endcode
+    """
+
+    due_soon_days = _int_env("DUE_SOON_DAYS", DEFAULT_DUE_SOON_DAYS)
+    due_upcoming_days = _int_env("DUE_UPCOMING_DAYS", DEFAULT_DUE_UPCOMING_DAYS)
+
+    if due_soon_days < 0:
+        raise ValueError("DUE_SOON_DAYS must be greater than or equal to 0")
+    if due_upcoming_days < due_soon_days:
+        raise ValueError("DUE_UPCOMING_DAYS must be greater than or equal to DUE_SOON_DAYS")
+
+    return due_soon_days, due_upcoming_days
 
 
 def _selected_user_value() -> str:
@@ -266,12 +314,12 @@ def load_config() -> Config:
     @details
     This function is the public entrypoint for configuration.  It loads `.env`
     values, validates constrained settings, parses the selected GitHub user and
-    optional recipient email, and returns a single immutable `Config` instance
-    for the rest of the digest pipeline.
+    optional recipient email, loads due marker thresholds, and returns a single
+    immutable `Config` instance for the rest of the digest pipeline.
 
     Environment access is intentionally concentrated here so GitHub access,
-    filtering, rendering, and email delivery can be tested with explicit values
-    rather than direct process-state dependencies.
+    filtering, rendering, due marker selection, and email delivery can be tested
+    with explicit values rather than direct process-state dependencies.
 
     @returns Fully populated runtime `Config`.
 
@@ -293,6 +341,7 @@ def load_config() -> Config:
 
     raw_github_user = _selected_user_value()
     github_user, recipient_email = _split_user_and_email(raw_github_user)
+    due_soon_days, due_upcoming_days = _load_due_thresholds()
 
     return Config(
         github_token=_optional_env("GITHUB_TOKEN"),
@@ -313,5 +362,7 @@ def load_config() -> Config:
         html_template=os.getenv("DIGEST_TEMPLATE_HTML", "digest.html.j2"),
         page_size=_int_env("GITHUB_PROJECT_PAGE_SIZE", 50),
         field_value_limit=_int_env("GITHUB_PROJECT_FIELD_VALUE_LIMIT", 50),
+        due_soon_days=due_soon_days,
+        due_upcoming_days=due_upcoming_days,
         smtp=_load_smtp_config(recipient_email),
     )
