@@ -20,6 +20,24 @@ SECTION_DEFINITIONS = [
     {"key": "closed", "title": "Closed"},
 ]
 
+"""@var UPCOMING_SOON_DAYS
+@brief Maximum number of remaining days treated as urgent upcoming work.
+@details
+Issues due within this many days use the warning marker.  The threshold keeps
+near-term work visually prominent without treating every future due date as
+urgent.
+"""
+UPCOMING_SOON_DAYS = 2
+
+"""@var UPCOMING_WINDOW_DAYS
+@brief Maximum number of remaining days treated as normal upcoming work.
+@details
+Issues due after the urgent upcoming window and within this many days use the
+calendar marker.  Later work uses the lower-urgency later marker so digest
+readers can distinguish near-term scheduling from longer-range planning.
+"""
+UPCOMING_WINDOW_DAYS = 7
+
 
 def build_digest_sections(items: list[dict[str, Any]], today: date | None = None) -> list[dict[str, Any]]:
     """@fn build_digest_sections(items, today=None)
@@ -116,11 +134,13 @@ def prepare_issue(item: dict[str, Any], today: date) -> dict[str, Any]:
     @details
     Normalized Project items still contain raw field values.  This function adds
     the values templates need directly: status, due date text, parsed due date,
-    due-state label, due marker, and a concise issue reference.
+    days remaining, due-state label, due marker, and a concise issue reference.
 
-    The due markers encode the digest's urgency model: explosion for overdue
-    work, red alert for work due today, yellow warning for future dated work,
-    and an empty checkbox for work without a due date.
+    The due markers encode the digest's urgency model from the number of days
+    remaining before the due date: explosion for overdue work, red alert for
+    work due today, yellow warning for work due within two days, calendar for
+    work due within seven days, sleepy face for later work, and an empty
+    checkbox for work without a due date.
 
     @param item Normalized Project item.
     @param today Date used to compare due dates.
@@ -136,19 +156,8 @@ def prepare_issue(item: dict[str, Any], today: date) -> dict[str, Any]:
     due_date = _first_present_field(fields, "Due Date", "Due", "due_date")
     status = _first_present_field(fields, "Status", "status")
     due_date_obj = _parse_date(due_date)
-
-    if due_date_obj and due_date_obj < today:
-        due_marker = "💥"
-        due_state = "overdue"
-    elif due_date_obj == today:
-        due_marker = "🚨"
-        due_state = "today"
-    elif due_date_obj:
-        due_marker = "⚠️"
-        due_state = "upcoming"
-    else:
-        due_marker = "☐"
-        due_state = "none"
+    days_remaining = (due_date_obj - today).days if due_date_obj else None
+    due_marker, due_state = _due_marker_for_days_remaining(days_remaining)
 
     repository = str(item.get("repository") or "")
     number = item.get("number")
@@ -159,6 +168,7 @@ def prepare_issue(item: dict[str, Any], today: date) -> dict[str, Any]:
         "status": status or "",
         "due_date": due_date or "",
         "due_date_obj": due_date_obj,
+        "days_remaining": days_remaining,
         "due_marker": due_marker,
         "due_state": due_state,
         "issue_ref": issue_ref,
@@ -197,6 +207,39 @@ def classify_issue(item: dict[str, Any]) -> str:
     if status == "in progress":
         return "in_progress"
     return "open"
+
+
+def _due_marker_for_days_remaining(days_remaining: int | None) -> tuple[str, str]:
+    """@fn _due_marker_for_days_remaining(days_remaining)
+    @brief Return the due marker and due-state label for a relative due date.
+    @details
+    The digest vocabulary is based on days remaining rather than a raw future
+    date check.  That gives recipients more useful urgency signals: immediate
+    work remains visually loud, near-term scheduled work stays visible, and
+    longer-range work receives a calmer marker.
+
+    @param days_remaining Number of days until the issue is due, or `None` when
+        the issue has no due date.
+    @returns Tuple containing the user-facing emoji marker and stable due-state
+        label consumed by templates and structured output.
+
+    @par Examples
+    @code
+    marker, state = _due_marker_for_days_remaining(1)
+    @endcode
+    """
+
+    if days_remaining is None:
+        return "☐", "none"
+    if days_remaining < 0:
+        return "💥", "overdue"
+    if days_remaining == 0:
+        return "🚨", "today"
+    if days_remaining <= UPCOMING_SOON_DAYS:
+        return "⚠️", "soon"
+    if days_remaining <= UPCOMING_WINDOW_DAYS:
+        return "📅", "upcoming"
+    return "💤", "later"
 
 
 def _issue_sort_key(item: dict[str, Any]) -> tuple[int, date, str, int]:

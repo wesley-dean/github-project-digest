@@ -227,7 +227,9 @@ Meaning of symbols:
 | --- | --- |
 | 💥 | Overdue |
 | 🚨 | Due today |
-| ⚠️ | Due in the future |
+| ⚠️ | Due in 1-2 days |
+| 📅 | Due in 3-7 days |
+| 💤 | Due in more than 7 days |
 | ☐ | No due date |
 
 These symbols are part of the user-facing digest vocabulary.

@@ -194,10 +194,13 @@ Date markers:
 
 - 💥 overdue
 - 🚨 due today
-- ⚠️ has a future due date
+- ⚠️ due in 1-2 days
+- 📅 due in 3-7 days
+- 💤 due in more than 7 days
 - ☐ no due date
 
 If your filter includes `state:open` or `status:open`, closed issues will normally be excluded before the Closed section is built. Remove that filter term if you want the digest to include closed/completed items.
+
 ## Running tests
 
 Install the project with the development extras and run pytest:

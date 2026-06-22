@@ -40,7 +40,7 @@
                   </div>
                   <div style="margin-top:6px; font-size:13px; color:#57606a;">
                     {% if issue.repository %}<span>{{ issue.repository }}</span>{% endif %}
-                    {% if issue.due_date %}{% if issue.repository %}<span>&nbsp;&bull;&nbsp;</span>{% endif %}<span style="{% if issue.due_state == 'today' %}color:#cf222e; font-weight:600;{% elif issue.due_state == 'overdue' %}color:#bc4c00; font-weight:600;{% endif %}">Due: {{ issue.due_date }}</span>{% endif %}
+                    {% if issue.due_date %}{% if issue.repository %}<span>&nbsp;&bull;&nbsp;</span>{% endif %}<span style="{% if issue.due_state == 'overdue' %}color:#bc4c00; font-weight:600;{% elif issue.due_state == 'today' %}color:#cf222e; font-weight:600;{% elif issue.due_state == 'soon' %}color:#9a6700; font-weight:600;{% elif issue.due_state == 'upcoming' %}color:#0969da; font-weight:600;{% elif issue.due_state == 'later' %}color:#57606a; font-weight:600;{% endif %}">Due: {{ issue.due_date }}</span>{% endif %}
                   </div>
                 </li>
                 {% endfor %}
