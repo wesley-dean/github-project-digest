@@ -38,9 +38,20 @@ readers can distinguish near-term scheduling from longer-range planning.
 """
 UPCOMING_WINDOW_DAYS = 7
 
+"""@var UNASSIGNED_LABEL
+@brief User-facing label rendered when an issue has no assignees.
+@details
+Using one shared value keeps text, HTML, JSON, YAML, and tests consistent when
+an issue has no GitHub assignees.  The label is intentionally plain language so
+it reads naturally in the digest metadata line.
+"""
+UNASSIGNED_LABEL = "unassigned"
 
-def build_digest_sections(items: list[dict[str, Any]], today: date | None = None) -> list[dict[str, Any]]:
-    """@fn build_digest_sections(items, today=None)
+
+def build_digest_sections(
+    items: list[dict[str, Any]], today: date | None = None, current_assignee: str | None = None
+) -> list[dict[str, Any]]:
+    """@fn build_digest_sections(items, today=None, current_assignee=None)
     @brief Group, prepare, and sort issues for digest templates.
     @details
     This function is the main bridge between normalized Project items and the
@@ -53,13 +64,18 @@ def build_digest_sections(items: list[dict[str, Any]], today: date | None = None
     and presents the most urgent workflow states first: blocked work, active
     work, open work, and then closed work.
 
+    The selected assignee login is passed through to item preparation so the
+    rendered digest can visually emphasize issues assigned to the current user
+    when broader filters include work owned by multiple people.
+
     @param items Normalized and filtered Project items.
     @param today Optional date used for deterministic tests and due-date logic.
+    @param current_assignee Optional GitHub login to highlight in assignee lists.
     @returns Ordered section dictionaries containing titles, counts, and issues.
 
     @par Examples
     @code
-    sections = build_digest_sections(filtered_items)
+    sections = build_digest_sections(filtered_items, current_assignee="octocat")
     @endcode
     """
 
@@ -67,7 +83,7 @@ def build_digest_sections(items: list[dict[str, Any]], today: date | None = None
     grouped: dict[str, list[dict[str, Any]]] = {section["key"]: [] for section in SECTION_DEFINITIONS}
 
     for item in items:
-        prepared = prepare_issue(item, today)
+        prepared = prepare_issue(item, today, current_assignee=current_assignee)
         section_key = classify_issue(prepared)
         if section_key in grouped:
             grouped[section_key].append(prepared)
@@ -128,13 +144,14 @@ def build_digest_summary(items: list[dict[str, Any]], today: date | None = None)
     }
 
 
-def prepare_issue(item: dict[str, Any], today: date) -> dict[str, Any]:
-    """@fn prepare_issue(item, today)
-    @brief Add template-friendly status, due-date, marker, and reference values.
+def prepare_issue(item: dict[str, Any], today: date, current_assignee: str | None = None) -> dict[str, Any]:
+    """@fn prepare_issue(item, today, current_assignee=None)
+    @brief Add template-friendly status, due-date, marker, assignee, and reference values.
     @details
     Normalized Project items still contain raw field values.  This function adds
     the values templates need directly: status, due date text, parsed due date,
-    days remaining, due-state label, due marker, and a concise issue reference.
+    days remaining, due-state label, due marker, prepared assignee display data,
+    and a concise issue reference.
 
     The due markers encode the digest's urgency model from the number of days
     remaining before the due date: explosion for overdue work, red alert for
@@ -142,13 +159,18 @@ def prepare_issue(item: dict[str, Any], today: date) -> dict[str, Any]:
     work due within seven days, sleepy face for later work, and an empty
     checkbox for work without a due date.
 
+    Assignee preparation keeps ownership semantics in Python instead of making
+    templates decide which user is the selected user.  Templates still choose how
+    to present emphasized assignees for their output format.
+
     @param item Normalized Project item.
     @param today Date used to compare due dates.
+    @param current_assignee Optional GitHub login to mark as the current user.
     @returns Copy of the item with additional digest-specific fields.
 
     @par Examples
     @code
-    prepared = prepare_issue(item, date.today())
+    prepared = prepare_issue(item, date.today(), current_assignee="octocat")
     @endcode
     """
 
@@ -158,6 +180,7 @@ def prepare_issue(item: dict[str, Any], today: date) -> dict[str, Any]:
     due_date_obj = _parse_date(due_date)
     days_remaining = (due_date_obj - today).days if due_date_obj else None
     due_marker, due_state = _due_marker_for_days_remaining(days_remaining)
+    assignee_display = _prepare_assignee_display(item.get("assignees"), current_assignee)
 
     repository = str(item.get("repository") or "")
     number = item.get("number")
@@ -171,6 +194,9 @@ def prepare_issue(item: dict[str, Any], today: date) -> dict[str, Any]:
         "days_remaining": days_remaining,
         "due_marker": due_marker,
         "due_state": due_state,
+        "assignee_display": assignee_display,
+        "assignees_text": ", ".join(part["login"] for part in assignee_display),
+        "assignees_markdown": _assignees_markdown(assignee_display),
         "issue_ref": issue_ref,
     }
 
@@ -240,6 +266,56 @@ def _due_marker_for_days_remaining(days_remaining: int | None) -> tuple[str, str
     if days_remaining <= UPCOMING_WINDOW_DAYS:
         return "📅", "upcoming"
     return "💤", "later"
+
+
+def _prepare_assignee_display(assignees: Any, current_assignee: str | None) -> list[dict[str, Any]]:
+    """@fn _prepare_assignee_display(assignees, current_assignee)
+    @brief Prepare normalized assignee display metadata for templates.
+    @details
+    Normalized items carry assignees as a list of GitHub logins.  This helper
+    turns that list into explicit display records and annotates the selected
+    user when present.  Empty assignee lists receive the shared `unassigned`
+    label so templates do not need to duplicate fallback logic.
+
+    @param assignees Candidate assignee list from a normalized item.
+    @param current_assignee Optional GitHub login to mark as the current user.
+    @returns Display dictionaries containing `login` and `is_current` keys.
+
+    @par Examples
+    @code
+    display = _prepare_assignee_display(["octocat", "hubot"], "octocat")
+    @endcode
+    """
+
+    current = str(current_assignee or "").strip().lower()
+    logins = [str(login).strip() for login in assignees or [] if str(login).strip()]
+    if not logins:
+        return [{"login": UNASSIGNED_LABEL, "is_current": False}]
+    return [{"login": login, "is_current": login.lower() == current} for login in logins]
+
+
+def _assignees_markdown(assignee_display: list[dict[str, Any]]) -> str:
+    """@fn _assignees_markdown(assignee_display)
+    @brief Return a Markdown-safe assignee list for plain-text digest output.
+    @details
+    The text digest is often read in Markdown-friendly contexts, including email
+    clients and logs.  This helper adds bold markers around the selected user
+    while preserving comma-space separation for multiple assignees.
+
+    @param assignee_display Prepared assignee display dictionaries.
+    @returns Comma-separated assignee text with the current user emphasized.
+
+    @par Examples
+    @code
+    text = _assignees_markdown([{"login": "octocat", "is_current": True}])
+    @endcode
+    """
+
+    parts = []
+    for assignee in assignee_display:
+        login = str(assignee.get("login") or "")
+        parts.append(f"**{login}**" if assignee.get("is_current") else login)
+    return ", ".join(parts)
 
 
 def _issue_sort_key(item: dict[str, Any]) -> tuple[int, date, str, int]:

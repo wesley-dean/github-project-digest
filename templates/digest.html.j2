@@ -39,8 +39,7 @@
                     <a href="{{ issue.url }}" style="color:#0969da; text-decoration:none; font-weight:600;">{{ issue.title }}</a>
                   </div>
                   <div style="margin-top:6px; font-size:13px; color:#57606a;">
-                    {% if issue.repository %}<span>{{ issue.repository }}</span>{% endif %}
-                    {% if issue.due_date %}{% if issue.repository %}<span>&nbsp;&bull;&nbsp;</span>{% endif %}<span style="{% if issue.due_state == 'overdue' %}color:#bc4c00; font-weight:600;{% elif issue.due_state == 'today' %}color:#cf222e; font-weight:600;{% elif issue.due_state == 'soon' %}color:#9a6700; font-weight:600;{% elif issue.due_state == 'upcoming' %}color:#0969da; font-weight:600;{% elif issue.due_state == 'later' %}color:#57606a; font-weight:600;{% endif %}">Due: {{ issue.due_date }}</span>{% endif %}
+                    {% if issue.repository %}<span>{{ issue.repository }}</span><span>&nbsp;&bull;&nbsp;</span>{% endif %}<span>{% for issue_assignee in issue.assignee_display %}{% if not loop.first %}, {% endif %}{% if issue_assignee.is_current %}<strong style="color:#24292f;">{{ issue_assignee.login }}</strong>{% else %}{{ issue_assignee.login }}{% endif %}{% endfor %}</span>{% if issue.due_date %}<span>&nbsp;&bull;&nbsp;</span><span style="{% if issue.due_state == 'overdue' %}color:#bc4c00; font-weight:600;{% elif issue.due_state == 'today' %}color:#cf222e; font-weight:600;{% elif issue.due_state == 'soon' %}color:#9a6700; font-weight:600;{% elif issue.due_state == 'upcoming' %}color:#0969da; font-weight:600;{% elif issue.due_state == 'later' %}color:#57606a; font-weight:600;{% endif %}">due: {{ issue.due_date }}</span>{% endif %}
                   </div>
                 </li>
                 {% endfor %}
