@@ -29,16 +29,17 @@ def _context(sample_items, today):
             "fields": {"Status": "Open", "Due Date": "2026-06-26"},
         },
     ]
+    current_assignee = "wesley-dean"
     return {
         "project": {
             "title": "Project Tracker",
             "url": "https://github.com/users/wesley-dean/projects/1",
         },
-        "assignee": {"login": "wesley-dean"},
+        "assignee": {"login": current_assignee},
         "requested_user": "@me",
         "filter_query": "sprint:@current is:issue state:open",
         "issues": items,
-        "sections": build_digest_sections(items, today),
+        "sections": build_digest_sections(items, today, current_assignee=current_assignee),
         "count": len(items),
         "summary": build_digest_summary(items, today),
     }
