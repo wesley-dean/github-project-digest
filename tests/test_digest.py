@@ -47,6 +47,54 @@ def test_prepare_issue_due_markers(today) -> None:
     assert unscheduled["due_state"] == "none"
 
 
+def test_prepare_issue_uses_custom_due_marker_thresholds(today) -> None:
+    base = {
+        "number": 1,
+        "title": "Example",
+        "state": "open",
+        "repository": "owner/repo",
+        "fields": {"Status": "Open"},
+    }
+
+    soon_boundary = prepare_issue(
+        {**base, "fields": {"Status": "Open", "Due Date": "2026-06-25"}},
+        today,
+        due_soon_days=5,
+        due_upcoming_days=10,
+    )
+    upcoming_start = prepare_issue(
+        {**base, "fields": {"Status": "Open", "Due Date": "2026-06-26"}},
+        today,
+        due_soon_days=5,
+        due_upcoming_days=10,
+    )
+    upcoming_boundary = prepare_issue(
+        {**base, "fields": {"Status": "Open", "Due Date": "2026-06-30"}},
+        today,
+        due_soon_days=5,
+        due_upcoming_days=10,
+    )
+    later_start = prepare_issue(
+        {**base, "fields": {"Status": "Open", "Due Date": "2026-07-01"}},
+        today,
+        due_soon_days=5,
+        due_upcoming_days=10,
+    )
+
+    assert soon_boundary["days_remaining"] == 5
+    assert soon_boundary["due_marker"] == "⚠️"
+    assert soon_boundary["due_state"] == "soon"
+    assert upcoming_start["days_remaining"] == 6
+    assert upcoming_start["due_marker"] == "📅"
+    assert upcoming_start["due_state"] == "upcoming"
+    assert upcoming_boundary["days_remaining"] == 10
+    assert upcoming_boundary["due_marker"] == "📅"
+    assert upcoming_boundary["due_state"] == "upcoming"
+    assert later_start["days_remaining"] == 11
+    assert later_start["due_marker"] == "💤"
+    assert later_start["due_state"] == "later"
+
+
 def test_build_digest_sections_groups_and_sorts_by_due_date(sample_items, today) -> None:
     sections = build_digest_sections(sample_items, today)
     by_key = {section["key"]: section for section in sections}
