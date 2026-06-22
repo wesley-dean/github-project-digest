@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from github_project_digest.config import DEFAULT_FILTER, load_config
+from github_project_digest.config import (
+    DEFAULT_DUE_SOON_DAYS,
+    DEFAULT_DUE_UPCOMING_DAYS,
+    DEFAULT_FILTER,
+    load_config,
+)
 
 
 def test_load_config_reads_required_values_and_defaults(monkeypatch, tmp_path) -> None:
@@ -22,6 +27,8 @@ def test_load_config_reads_required_values_and_defaults(monkeypatch, tmp_path) -
     assert config.github_user == "@me"
     assert config.recipient_email is None
     assert config.filter_query == DEFAULT_FILTER
+    assert config.due_soon_days == DEFAULT_DUE_SOON_DAYS
+    assert config.due_upcoming_days == DEFAULT_DUE_UPCOMING_DAYS
     assert config.smtp is None
 
 
@@ -108,7 +115,7 @@ def test_load_config_accepts_github_app_auth_without_pat(monkeypatch, tmp_path) 
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setenv("GITHUB_APP_ID", "12345")
     monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "67890")
-    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----")
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----")
     monkeypatch.setenv("GITHUB_PROJECT_OWNER", "wesley-dean")
     monkeypatch.setenv("GITHUB_PROJECT_NUMBER", "1")
 
@@ -131,3 +138,40 @@ def test_load_config_supports_output_format_alias(monkeypatch, tmp_path) -> None
     config = load_config()
 
     assert config.output_format == "html"
+
+
+def test_load_config_reads_due_marker_thresholds(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setenv("GITHUB_PROJECT_OWNER", "wesley-dean")
+    monkeypatch.setenv("GITHUB_PROJECT_NUMBER", "1")
+    monkeypatch.setenv("DUE_SOON_DAYS", "5")
+    monkeypatch.setenv("DUE_UPCOMING_DAYS", "10")
+
+    config = load_config()
+
+    assert config.due_soon_days == 5
+    assert config.due_upcoming_days == 10
+
+
+def test_load_config_rejects_negative_due_soon_days(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setenv("GITHUB_PROJECT_OWNER", "wesley-dean")
+    monkeypatch.setenv("GITHUB_PROJECT_NUMBER", "1")
+    monkeypatch.setenv("DUE_SOON_DAYS", "-1")
+
+    with pytest.raises(ValueError, match="DUE_SOON_DAYS"):
+        load_config()
+
+
+def test_load_config_rejects_upcoming_days_before_soon_days(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setenv("GITHUB_PROJECT_OWNER", "wesley-dean")
+    monkeypatch.setenv("GITHUB_PROJECT_NUMBER", "1")
+    monkeypatch.setenv("DUE_SOON_DAYS", "10")
+    monkeypatch.setenv("DUE_UPCOMING_DAYS", "5")
+
+    with pytest.raises(ValueError, match="DUE_UPCOMING_DAYS"):
+        load_config()
