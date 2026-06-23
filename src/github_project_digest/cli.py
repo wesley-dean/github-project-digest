@@ -12,6 +12,7 @@ from github_project_digest.digest import build_digest_sections, build_digest_sum
 from github_project_digest.github import GitHubProjectClient
 from github_project_digest.github_auth import resolve_github_token
 from github_project_digest.normalize import normalize_project
+from github_project_digest.emailer import send_digest_email
 from github_project_digest.render import render_digest
 
 
@@ -64,6 +65,11 @@ def _render_user_digest(config: Config, context: dict[str, Any]) -> dict[str, st
     }
 
 
+def _deliver_user_digest(configured_user: ConfiguredUser, rendered: dict[str, str]) -> None:
+    if configured_user.smtp:
+        send_digest_email(configured_user.smtp, rendered["text"], rendered["html"])
+
+
 def _stdout_payload(
     config: Config,
     contexts: list[dict[str, Any]],
@@ -107,6 +113,7 @@ def main() -> int:
         for configured_user in config.users:
             context = _build_user_digest_context(config, configured_user, client)
             rendered = _render_user_digest(config, context)
+            _deliver_user_digest(configured_user, rendered)
             contexts.append(context)
             rendered_outputs.append(rendered)
 
