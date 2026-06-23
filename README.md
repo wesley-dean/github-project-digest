@@ -1,6 +1,6 @@
 # github-project-digest
 
-MVP Python project that fetches GitHub Project v2 items with GraphQL, applies a small local filter, renders the results through Jinja2, writes the output to STDOUT, and can optionally send a single email through SMTP.
+MVP Python project that fetches GitHub Project v2 items with GraphQL, applies a small local filter, renders the results through Jinja2, writes the output to STDOUT, and can optionally send per-user emails through SMTP. The tool supports built-in fan-out so a single invocation can generate separate digests for multiple configured GitHub users.
 
 ## What it does
 
@@ -11,7 +11,7 @@ MVP Python project that fetches GitHub Project v2 items with GraphQL, applies a 
 5. Applies a small MVP filter locally.
 6. Renders either plain text or HTML with Jinja2.
 7. Writes the result to STDOUT.
-8. Optionally sends a multipart plain-text/HTML email through SMTP when `GITHUB_USER` includes an email address.
+8. Optionally sends a multipart plain-text/HTML email through SMTP for each configured `GITHUB_USER` entry that includes an email address.
 
 ## Requirements
 
@@ -43,6 +43,7 @@ GITHUB_APP_PRIVATE_KEY_FILE=
 GITHUB_PROJECT_OWNER=octo-org
 GITHUB_PROJECT_NUMBER=5
 GITHUB_PROJECT_OWNER_TYPE=organization
+# GITHUB_USER may be @me, a login, login:email, or a comma-separated fan-out list.
 GITHUB_USER=@me
 GITHUB_PROJECT_FILTER=sprint:@current assignee:@user is:issue state:open
 DIGEST_OUTPUT_FORMAT=text
@@ -109,40 +110,95 @@ If both are set, `GITHUB_TOKEN` wins. The GitHub App mode generates a short-live
 
 ## SMTP email delivery
 
-By default, the digest is written to STDOUT only. To also send the digest by email, set `GITHUB_USER` to `username:email@example.com` and provide the required SMTP settings. The script currently supports a single destination address per run.
+By default, digests are written to STDOUT only. To also send a digest by email, add an email address to a `GITHUB_USER` entry using the `username:email@example.com` form and provide the required SMTP settings.
 
-The email is sent as a multipart message using both templates:
+Each configured `GITHUB_USER` entry may include its own email address. When present, the application renders and delivers a separate digest for that user.
+
+Examples:
+
+```dotenv
+GITHUB_USER=octocat:octocat@example.com
+GITHUB_USER=octocat:octocat@example.com,hubot:hubot@example.com
+GITHUB_USER=@me,hubot:hubot@example.com
+```
+
+Each email is sent as a multipart message using both templates:
 
 - `templates/digest.txt.j2` for `text/plain`
 - `templates/digest.html.j2` for `text/html`
 
 For Gmail SMTP, use `smtp.gmail.com`, port `587`, `SMTP_USE_TLS=true`, and a Gmail app password. Do not use your normal Google account password.
 
-If `GITHUB_USER` does not include an email address, no email is sent. STDOUT output still follows `DIGEST_OUTPUT_FORMAT`, which keeps local testing and GitHub Actions logging useful.
+If a `GITHUB_USER` entry does not include an email address, no email is sent for that user. STDOUT output still follows `DIGEST_OUTPUT_FORMAT`, which keeps local testing and GitHub Actions logging useful.
 
 ## Selecting the assignee
 
 Set `GITHUB_USER` to the GitHub login whose assigned issues should be included. It defaults to `@me`, which resolves to the authenticated token owner through GraphQL. To send email, append a destination address after a colon.
 
 ```dotenv
+# Current authenticated user
 GITHUB_USER=@me
-# or
+
+# Specific GitHub user
 GITHUB_USER=octocat
-# or
+
+# Specific GitHub user with email delivery
 GITHUB_USER=octocat:octocat@example.com
-```
 
-This makes shell iteration straightforward:
+# Multiple GitHub users
+GITHUB_USER=octocat,hubot
 
-```bash
-for GITHUB_USER in wesley-dean:wesley-dean@example.com joe-dean:joe-dean@example.com; do
-  github-project-digest
-done
+# Multiple GitHub users with email delivery
+GITHUB_USER=octocat:octocat@example.com,hubot:hubot@example.com
+
+# Mixed forms
+GITHUB_USER=@me,hubot:hubot@example.com
 ```
 
 The ordinary shell `USER` variable is intentionally ignored so local shells and GitHub Actions runners cannot accidentally change the digest assignee.
 
 The Project item query accepts the resolved assignee login as the GraphQL variable `$assigneeLogin`. GitHub Project v2 does not expose the same full filter syntax as the Project UI through this query, so this script still applies the supported MVP filter locally after fetching the Project items.
+
+## Built-in fan-out
+
+`GITHUB_USER` may contain a comma-separated list of user specifications.
+
+Each entry is processed independently.
+
+For every configured user, the application:
+
+1. Resolves the GitHub login.
+2. Retrieves Project items.
+3. Applies filtering.
+4. Builds digest sections.
+5. Renders text and HTML output.
+6. Optionally sends email.
+7. Contributes its results to STDOUT output.
+
+This preserves the existing one-user-per-digest model while allowing a single invocation to generate multiple digests.
+
+Examples:
+
+```dotenv
+GITHUB_USER=octocat,hubot
+```
+
+```dotenv
+GITHUB_USER=octocat:octocat@example.com,hubot:hubot@example.com
+```
+
+Whitespace around commas is ignored.
+
+Empty entries are rejected:
+
+```dotenv
+# invalid
+GITHUB_USER=octocat,,hubot
+```
+
+For text and HTML output, multiple digests are separated in STDOUT.
+
+For JSON and YAML output, multiple digests are emitted inside a top-level `digests` collection.
 
 ## Example use cases
 
@@ -299,7 +355,7 @@ python -m pip install -e '.[dev]'
 PYTHONPATH=src pytest -q
 ```
 
-The tests cover configuration loading, GitHub App token generation, filter parsing, local filtering, Project item normalization, digest grouping/sorting, text and HTML rendering, SMTP message construction, and GitHub client pagination behavior using mocked GraphQL responses.
+The tests cover configuration loading, configured-user parsing, GitHub App token generation, filter parsing, local filtering, Project item normalization, digest grouping and sorting, text and HTML rendering, fan-out output aggregation, SMTP message construction, and GitHub client pagination behavior using mocked GraphQL responses.
 
 
 ## Container usage
@@ -329,19 +385,16 @@ podman run --rm \
   github-project-digest
 ```
 
-Iterate across multiple users from the shell:
+Run for multiple users in a single invocation:
 
 ```bash
-for GITHUB_USER in \
-  wesley-dean:wesley-dean@example.com \
-  joe-dean:joe-dean@example.com
-do
-  podman run --rm \
-    --env-file .env \
-    -e GITHUB_USER="$GITHUB_USER" \
-    github-project-digest
-done
+podman run --rm \
+  --env-file .env \
+  -e GITHUB_USER='wesley-dean:wesley-dean@example.com,joe-dean:joe-dean@example.com' \
+  github-project-digest
 ```
+
+The application performs fan-out internally and generates a separate digest for each configured user. Shell loops are no longer required for common multi-user use cases.
 
 The image entrypoint is `github-project-digest`, so command-line arguments are not required. The container intentionally does not include your `.env` file; pass secrets at runtime with `--env-file`, individual `-e` values, or your CI/CD secret mechanism.
 
