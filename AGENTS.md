@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`github-project-digest` generates a personalized digest of GitHub Project v2 work items.
+`github-project-digest` generates personalized digests of GitHub Project v2 work items.
 
-The tool retrieves Project data from GitHub, filters items for a selected user, organizes the results into meaningful workflow sections, renders the results using Jinja2 templates, optionally delivers the digest through SMTP email, and writes the selected output format to STDOUT.
+The tool retrieves Project data from GitHub, filters items for selected users, organizes the results into meaningful workflow sections, renders the results using Jinja2 templates, optionally delivers each digest through SMTP email, and writes the selected output format to STDOUT.
 
 Typical use cases include:
 
@@ -25,6 +25,8 @@ The application follows a linear pipeline:
 Configuration
     ↓
 Authentication
+    ↓
+For each configured user
     ↓
 GitHub GraphQL Query
     ↓
@@ -60,8 +62,10 @@ Responsibilities:
 - Parse configuration
 - Validate required values
 - Parse `GITHUB_USER`
+- Build `ConfiguredUser` entries
+- Preserve first-user compatibility fields on `Config`
 - Load due-date marker thresholds
-- Build SMTP configuration
+- Build per-user SMTP configuration
 - Select GitHub authentication mode
 
 No other module should directly read environment variables.
@@ -179,6 +183,8 @@ Application entrypoint.
 
 Coordinates the complete pipeline.
 
+When `GITHUB_USER` contains multiple configured user entries, the CLI performs fan-out by running the existing digest pipeline once per configured user. This preserves the product rule that each rendered digest has one selected GitHub user, one assignee context, one optional email recipient, and one render pass.
+
 This module should remain thin.
 
 Avoid placing business logic here.
@@ -288,13 +294,13 @@ repository • unassigned • due: YYYY-MM-DD
 
 ## User Selection
 
-The selected GitHub user is controlled by:
+Configured GitHub users are controlled by:
 
 ```text
 GITHUB_USER
 ```
 
-Examples:
+Single-user examples:
 
 ```text
 @me
@@ -304,27 +310,44 @@ wesley-dean
 wesley-dean:wes@example.com
 ```
 
-Format:
+Fan-out examples:
+
+```text
+wesley-dean,octocat
+
+wesley-dean:wes@example.com,octocat:octocat@example.com
+
+@me,octocat:octocat@example.com
+```
+
+Entry format:
 
 ```text
 github-login:email-address
 ```
 
-When an email address is present:
+When an email address is present on an entry:
 
-- SMTP delivery is enabled
-- The digest still writes to STDOUT
+- SMTP delivery is enabled for that configured user.
+- The digest still writes to STDOUT.
 
-This design enables shell fan-out loops such as:
+Whitespace around commas is ignored.
 
-```bash
-for GITHUB_USER in \
-    wesley-dean:wes@example.com \
-    octocat:octocat@example.com
-do
-    github-project-digest
-done
+Empty entries are invalid.  For example, `wesley-dean,,octocat` should raise a configuration error rather than silently skipping an entry.
+
+Fan-out is not a multi-user digest.  It is repeated one-user digest generation:
+
+```text
+load config
+    ↓
+for configured_user in users
+    ↓
+run existing digest pipeline
 ```
+
+The existing first-user compatibility fields on `Config` exist to avoid breaking older single-user call sites, but new orchestration should prefer `Config.users`.
+
+Shell fan-out loops still work, but built-in fan-out should be preferred when one invocation should produce multiple per-user digests.
 
 ## GraphQL Queries
 
@@ -355,6 +378,9 @@ Tests should validate:
 4. Due-date handling
 5. Configurable due-date threshold boundaries
 6. Rendering expectations
+7. Configured user parsing
+8. Fan-out STDOUT aggregation
+9. Per-user SMTP delivery behavior
 
 Tests should avoid unnecessary dependency on GitHub APIs.
 
@@ -424,6 +450,7 @@ Do not limit comments to implementation details.
 8. Favor readability over cleverness.
 9. Prefer explicit behavior over hidden magic.
 10. Document architectural intent, not merely implementation details.
+11. Preserve one-user-per-digest semantics when adding fan-out behavior.
 
 ## If You Are an AI Coding Agent
 
