@@ -1,17 +1,3 @@
-"""@file cli.py
-@brief Command-line entrypoint for github-project-digest.
-@details
-This module wires the application's documented pieces into one executable flow.
-It is intentionally thin: configuration, authentication, GitHub retrieval,
-normalization, filtering, digest preparation, rendering, and SMTP delivery all
-remain in their own modules so the entrypoint can describe the pipeline without
-owning each implementation detail.
-
-The CLI is designed for local shell usage, Docker execution, Jenkins jobs,
-GitHub Actions, and other schedulers.  It writes the selected output format to
-STDOUT and uses the process exit code to communicate success or failure.
-"""
-
 from __future__ import annotations
 
 import json
@@ -20,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from github_project_digest.config import load_config
+from github_project_digest.config import Config, ConfiguredUser, load_config
 from github_project_digest.filtering import apply_filter, parse_filter
 from github_project_digest.digest import build_digest_sections, build_digest_summary
 from github_project_digest.github import GitHubProjectClient
@@ -30,80 +16,108 @@ from github_project_digest.emailer import send_digest_email
 from github_project_digest.render import render_digest
 
 
+TEXT_DIGEST_SEPARATOR = "===== Digest for {user} ====="
+HTML_DIGEST_SEPARATOR = "<h1>Digest for {user}</h1>"
+
+
+def _build_user_digest_context(
+    config: Config,
+    configured_user: ConfiguredUser,
+    client: GitHubProjectClient,
+) -> dict[str, Any]:
+    assignee_login = client.resolve_user_login(configured_user.github_user)
+    raw = client.fetch_project_items(
+        owner=config.project_owner,
+        project_number=config.project_number,
+        owner_type=config.project_owner_type,
+        assignee_login=assignee_login,
+        page_size=config.page_size,
+        field_value_limit=config.field_value_limit,
+    )
+    normalized = normalize_project(raw)
+    project_filter = parse_filter(config.filter_query, assignee_login)
+    issues = apply_filter(normalized["items"], project_filter)
+    sections = build_digest_sections(
+        issues,
+        current_assignee=assignee_login,
+        due_soon_days=config.due_soon_days,
+        due_upcoming_days=config.due_upcoming_days,
+    )
+    summary = build_digest_summary(issues)
+
+    return {
+        "project": normalized["project"],
+        "assignee": normalized.get("assignee", {"login": assignee_login}),
+        "requested_user": configured_user.github_user,
+        "recipient_email": configured_user.recipient_email,
+        "filter_query": config.filter_query,
+        "issues": issues,
+        "sections": sections,
+        "count": len(issues),
+        "summary": summary,
+    }
+
+
+def _render_user_digest(config: Config, context: dict[str, Any]) -> dict[str, str]:
+    return {
+        "text": render_digest(config.text_template, context),
+        "html": render_digest(config.html_template, context),
+    }
+
+
+def _deliver_user_digest(configured_user: ConfiguredUser, rendered: dict[str, str]) -> None:
+    if configured_user.smtp:
+        send_digest_email(configured_user.smtp, rendered["text"], rendered["html"])
+
+
+def _stdout_payload(
+    config: Config,
+    contexts: list[dict[str, Any]],
+    rendered_outputs: list[dict[str, str]],
+) -> str:
+    multiple_users = len(contexts) > 1
+
+    if config.output_format == "json":
+        payload: Any = {"digests": contexts} if multiple_users else contexts[0]
+        return json.dumps(payload, indent=2, sort_keys=True)
+
+    if config.output_format == "yaml":
+        payload = {"digests": contexts} if multiple_users else contexts[0]
+        return yaml.safe_dump(payload, sort_keys=False)
+
+    if config.output_format == "html":
+        if not multiple_users:
+            return rendered_outputs[0]["html"]
+        return "\n\n".join(
+            f"{HTML_DIGEST_SEPARATOR.format(user=context['requested_user'])}\n\n{rendered['html']}"
+            for context, rendered in zip(contexts, rendered_outputs, strict=True)
+        )
+
+    if not multiple_users:
+        return rendered_outputs[0]["text"]
+    return "\n\n".join(
+        f"{TEXT_DIGEST_SEPARATOR.format(user=context['requested_user'])}\n\n{rendered['text']}"
+        for context, rendered in zip(contexts, rendered_outputs, strict=True)
+    )
+
+
 def main() -> int:
-    """@fn main()
-    @brief Run the GitHub Project digest pipeline.
-    @details
-    This function is the command-line orchestration layer.  It deliberately keeps
-    the application flow linear: load configuration, resolve authentication,
-    fetch Project data, normalize GraphQL results, parse and apply the filter,
-    build digest sections and summary counts, render templates, optionally send
-    email, and finally write the requested output format to STDOUT.
-
-    Email delivery and STDOUT output are both performed when SMTP is configured.
-    That behavior keeps Jenkins and local runs observable even when the primary
-    delivery mechanism is email.  A failed pipeline returns a non-zero exit code
-    and writes a compact error message to STDERR so schedulers and CI systems can
-    detect failures without parsing normal digest output.
-
-    @returns Process-style exit code: `0` for success, `1` for failure.
-
-    @par Examples
-    @code
-    raise SystemExit(main())
-    @endcode
-    """
-
     try:
         config = load_config()
         github_token = resolve_github_token(config.github_token, config.github_app)
         client = GitHubProjectClient(github_token)
-        assignee_login = client.resolve_user_login(config.github_user)
-        raw = client.fetch_project_items(
-            owner=config.project_owner,
-            project_number=config.project_number,
-            owner_type=config.project_owner_type,
-            assignee_login=assignee_login,
-            page_size=config.page_size,
-            field_value_limit=config.field_value_limit,
-        )
-        normalized = normalize_project(raw)
-        project_filter = parse_filter(config.filter_query, assignee_login)
-        issues = apply_filter(normalized["items"], project_filter)
-        sections = build_digest_sections(
-            issues,
-            current_assignee=assignee_login,
-            due_soon_days=config.due_soon_days,
-            due_upcoming_days=config.due_upcoming_days,
-        )
-        summary = build_digest_summary(issues)
 
-        context: dict[str, Any] = {
-            "project": normalized["project"],
-            "assignee": normalized.get("assignee", {"login": assignee_login}),
-            "requested_user": config.github_user,
-            "recipient_email": config.recipient_email,
-            "filter_query": config.filter_query,
-            "issues": issues,
-            "sections": sections,
-            "count": len(issues),
-            "summary": summary,
-        }
+        contexts: list[dict[str, Any]] = []
+        rendered_outputs: list[dict[str, str]] = []
 
-        text_output = render_digest(config.text_template, context)
-        html_output = render_digest(config.html_template, context)
+        for configured_user in config.users:
+            context = _build_user_digest_context(config, configured_user, client)
+            rendered = _render_user_digest(config, context)
+            _deliver_user_digest(configured_user, rendered)
+            contexts.append(context)
+            rendered_outputs.append(rendered)
 
-        if config.smtp:
-            send_digest_email(config.smtp, text_output, html_output)
-
-        if config.output_format == "json":
-            print(json.dumps(context, indent=2, sort_keys=True))
-        elif config.output_format == "yaml":
-            print(yaml.safe_dump(context, sort_keys=False))
-        elif config.output_format == "html":
-            print(html_output)
-        else:
-            print(text_output)
+        print(_stdout_payload(config, contexts, rendered_outputs))
 
         return 0
     except Exception as exc:

@@ -10,7 +10,9 @@ can operate on typed values rather than raw process environment strings.
 
 The module also owns the `GITHUB_USER` parsing convention.  A colon-separated
 value identifies both the GitHub assignee and the optional email destination,
-while a bare login or `@me` keeps the tool in STDOUT-only mode.
+while a bare login or `@me` keeps the tool in STDOUT-only mode.  Multiple values
+may be separated with commas so a future orchestration layer can fan out one
+separate digest per configured user.
 """
 
 from __future__ import annotations
@@ -53,6 +55,23 @@ DEFAULT_DUE_UPCOMING_DAYS = 7
 
 
 @dataclass(frozen=True)
+class ConfiguredUser:
+    """@class ConfiguredUser
+    @brief Runtime configuration for one digest recipient or assignee.
+    @details
+    A configured user preserves the existing one-user-per-digest semantic model
+    while giving the configuration layer a place to represent future fan-out.
+    Each entry contains the GitHub user expression that will be resolved for one
+    digest, the optional recipient email parsed from that expression, and the
+    optional SMTP settings prepared for that recipient.
+    """
+
+    github_user: str
+    recipient_email: str | None
+    smtp: SmtpConfig | None
+
+
+@dataclass(frozen=True)
 class Config:
     """@class Config
     @brief Immutable runtime configuration for one digest execution.
@@ -63,6 +82,12 @@ class Config:
     command-line execution, Docker execution, Jenkins execution, PAT auth,
     GitHub App auth, SMTP delivery, due marker thresholds, and template rendering
     aligned through one configuration contract.
+
+    The `users` collection is the forward-compatible representation used for
+    digest fan-out.  The legacy `github_user`, `recipient_email`, and `smtp`
+    fields remain populated from the first configured user so existing single
+    user call sites continue to behave as before while the CLI evolves toward
+    iterating over `users`.
     """
 
     github_token: str | None
@@ -70,6 +95,7 @@ class Config:
     project_owner: str
     project_number: int
     project_owner_type: str
+    users: list[ConfiguredUser]
     github_user: str
     recipient_email: str | None
     filter_query: str
@@ -268,6 +294,49 @@ def _split_user_and_email(value: str) -> tuple[str, str | None]:
     return user, email
 
 
+def _parse_configured_users(value: str) -> list[ConfiguredUser]:
+    """@fn _parse_configured_users(value)
+    @brief Parse one or more configured digest users.
+    @details
+    `GITHUB_USER` accepts the existing single-user forms and a comma-separated
+    fan-out list of those same forms.  This parser deliberately treats commas as
+    simple separators rather than implementing RFC CSV semantics.  Surrounding
+    whitespace is ignored, and empty entries are rejected so accidental doubled
+    commas fail visibly instead of silently skipping a recipient.
+
+    Each parsed entry receives its own optional SMTP configuration.  That keeps
+    future fan-out behavior aligned with the product rule that every digest has
+    one selected GitHub user, one assignee context, one optional email recipient,
+    and one render pass.
+
+    @param value Raw `GITHUB_USER` value.
+    @returns Configured user entries in declaration order.
+
+    @par Examples
+    @code
+    users = _parse_configured_users("octocat,hubot:hubot@example.com")
+    @endcode
+    """
+
+    entries = (value or "@me").split(",")
+    configured_users: list[ConfiguredUser] = []
+
+    for entry in entries:
+        if entry.strip() == "":
+            raise ValueError("GITHUB_USER contains an empty user entry")
+
+        github_user, recipient_email = _split_user_and_email(entry)
+        configured_users.append(
+            ConfiguredUser(
+                github_user=github_user,
+                recipient_email=recipient_email,
+                smtp=_load_smtp_config(recipient_email),
+            )
+        )
+
+    return configured_users
+
+
 def _load_smtp_config(recipient: str | None) -> SmtpConfig | None:
     """@fn _load_smtp_config(recipient)
     @brief Build SMTP configuration when email delivery is requested.
@@ -313,9 +382,9 @@ def load_config() -> Config:
     @brief Load and normalize all runtime configuration.
     @details
     This function is the public entrypoint for configuration.  It loads `.env`
-    values, validates constrained settings, parses the selected GitHub user and
-    optional recipient email, loads due marker thresholds, and returns a single
-    immutable `Config` instance for the rest of the digest pipeline.
+    values, validates constrained settings, parses the selected GitHub user list,
+    loads due marker thresholds, and returns a single immutable `Config` instance
+    for the rest of the digest pipeline.
 
     Environment access is intentionally concentrated here so GitHub access,
     filtering, rendering, due marker selection, and email delivery can be tested
@@ -339,8 +408,8 @@ def load_config() -> Config:
     if output_format not in {"text", "html", "json", "yaml"}:
         raise ValueError("DIGEST_OUTPUT_FORMAT/OUTPUT_FORMAT must be one of: text, html, json, yaml")
 
-    raw_github_user = _selected_user_value()
-    github_user, recipient_email = _split_user_and_email(raw_github_user)
+    users = _parse_configured_users(_selected_user_value())
+    first_user = users[0]
     due_soon_days, due_upcoming_days = _load_due_thresholds()
 
     return Config(
@@ -354,8 +423,9 @@ def load_config() -> Config:
         project_owner=_required("GITHUB_PROJECT_OWNER"),
         project_number=_int_env("GITHUB_PROJECT_NUMBER", 0),
         project_owner_type=owner_type,
-        github_user=github_user,
-        recipient_email=recipient_email,
+        users=users,
+        github_user=first_user.github_user,
+        recipient_email=first_user.recipient_email,
         filter_query=os.getenv("GITHUB_PROJECT_FILTER", DEFAULT_FILTER),
         output_format=output_format,
         text_template=os.getenv("DIGEST_TEMPLATE_TEXT", "digest.txt.j2"),
@@ -364,5 +434,5 @@ def load_config() -> Config:
         field_value_limit=_int_env("GITHUB_PROJECT_FIELD_VALUE_LIMIT", 50),
         due_soon_days=due_soon_days,
         due_upcoming_days=due_upcoming_days,
-        smtp=_load_smtp_config(recipient_email),
+        smtp=first_user.smtp,
     )
