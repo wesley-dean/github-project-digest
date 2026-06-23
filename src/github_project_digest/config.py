@@ -53,6 +53,23 @@ DEFAULT_DUE_UPCOMING_DAYS = 7
 
 
 @dataclass(frozen=True)
+class ConfiguredUser:
+    """@class ConfiguredUser
+    @brief Runtime configuration for one digest recipient or assignee.
+    @details
+    A configured user preserves the existing one-user-per-digest semantic model
+    while giving the configuration layer a place to represent future fan-out.
+    Each entry contains the GitHub user expression that will be resolved for one
+    digest, the optional recipient email parsed from that expression, and the
+    optional SMTP settings prepared for that recipient.
+    """
+
+    github_user: str
+    recipient_email: str | None
+    smtp: SmtpConfig | None
+
+
+@dataclass(frozen=True)
 class Config:
     """@class Config
     @brief Immutable runtime configuration for one digest execution.
@@ -63,6 +80,12 @@ class Config:
     command-line execution, Docker execution, Jenkins execution, PAT auth,
     GitHub App auth, SMTP delivery, due marker thresholds, and template rendering
     aligned through one configuration contract.
+
+    The `users` collection is the forward-compatible representation used for
+    digest fan-out.  The legacy `github_user`, `recipient_email`, and `smtp`
+    fields remain populated from the first configured user so existing single
+    user call sites continue to behave as before while the CLI evolves toward
+    iterating over `users`.
     """
 
     github_token: str | None
@@ -70,6 +93,7 @@ class Config:
     project_owner: str
     project_number: int
     project_owner_type: str
+    users: list[ConfiguredUser]
     github_user: str
     recipient_email: str | None
     filter_query: str
@@ -341,6 +365,12 @@ def load_config() -> Config:
 
     raw_github_user = _selected_user_value()
     github_user, recipient_email = _split_user_and_email(raw_github_user)
+    smtp = _load_smtp_config(recipient_email)
+    configured_user = ConfiguredUser(
+        github_user=github_user,
+        recipient_email=recipient_email,
+        smtp=smtp,
+    )
     due_soon_days, due_upcoming_days = _load_due_thresholds()
 
     return Config(
@@ -354,6 +384,7 @@ def load_config() -> Config:
         project_owner=_required("GITHUB_PROJECT_OWNER"),
         project_number=_int_env("GITHUB_PROJECT_NUMBER", 0),
         project_owner_type=owner_type,
+        users=[configured_user],
         github_user=github_user,
         recipient_email=recipient_email,
         filter_query=os.getenv("GITHUB_PROJECT_FILTER", DEFAULT_FILTER),
@@ -364,5 +395,5 @@ def load_config() -> Config:
         field_value_limit=_int_env("GITHUB_PROJECT_FIELD_VALUE_LIMIT", 50),
         due_soon_days=due_soon_days,
         due_upcoming_days=due_upcoming_days,
-        smtp=_load_smtp_config(recipient_email),
+        smtp=smtp,
     )
