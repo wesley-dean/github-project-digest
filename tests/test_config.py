@@ -6,6 +6,7 @@ from github_project_digest.config import (
     DEFAULT_DUE_SOON_DAYS,
     DEFAULT_DUE_UPCOMING_DAYS,
     DEFAULT_FILTER,
+    DEFAULT_SEND_EMPTY_EMAIL,
     load_config,
 )
 
@@ -42,6 +43,7 @@ def test_load_config_reads_required_values_and_defaults(monkeypatch, tmp_path) -
     assert config.filter_query == DEFAULT_FILTER
     assert config.due_soon_days == DEFAULT_DUE_SOON_DAYS
     assert config.due_upcoming_days == DEFAULT_DUE_UPCOMING_DAYS
+    assert config.send_empty_email is DEFAULT_SEND_EMPTY_EMAIL
     assert config.smtp is None
 
 
@@ -244,6 +246,45 @@ def test_load_config_reads_due_marker_thresholds(monkeypatch, tmp_path) -> None:
 
     assert config.due_soon_days == 5
     assert config.due_upcoming_days == 10
+
+
+def test_load_config_defaults_to_sending_empty_email(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    _set_required_project_env(monkeypatch)
+
+    config = load_config()
+
+    assert config.send_empty_email is DEFAULT_SEND_EMPTY_EMAIL
+    assert config.send_empty_email is True
+
+
+def test_load_config_reads_send_empty_email_true(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    _set_required_project_env(monkeypatch)
+    monkeypatch.setenv("SEND_EMPTY_EMAIL", "true")
+
+    config = load_config()
+
+    assert config.send_empty_email is True
+
+
+def test_load_config_reads_send_empty_email_false(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    _set_required_project_env(monkeypatch)
+    monkeypatch.setenv("SEND_EMPTY_EMAIL", "false")
+
+    config = load_config()
+
+    assert config.send_empty_email is False
+
+
+def test_load_config_rejects_invalid_send_empty_email(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    _set_required_project_env(monkeypatch)
+    monkeypatch.setenv("SEND_EMPTY_EMAIL", "maybe")
+
+    with pytest.raises(ValueError, match="SEND_EMPTY_EMAIL"):
+        load_config()
 
 
 def test_load_config_rejects_negative_due_soon_days(monkeypatch, tmp_path) -> None:
