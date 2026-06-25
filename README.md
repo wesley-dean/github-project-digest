@@ -49,6 +49,7 @@ GITHUB_PROJECT_FILTER=sprint:@current assignee:@user is:issue state:open
 DIGEST_OUTPUT_FORMAT=text
 DUE_SOON_DAYS=2
 DUE_UPCOMING_DAYS=7
+SEND_EMPTY_EMAIL=true
 ```
 
 For a user-owned Project, set:
@@ -131,6 +132,24 @@ For Gmail SMTP, use `smtp.gmail.com`, port `587`, `SMTP_USE_TLS=true`, and a Gma
 
 If a `GITHUB_USER` entry does not include an email address, no email is sent for that user. STDOUT output still follows `DIGEST_OUTPUT_FORMAT`, which keeps local testing and GitHub Actions logging useful.
 
+### Empty digest emails
+
+`SEND_EMPTY_EMAIL` controls SMTP delivery when a configured user's filtered digest contains zero matching issues.
+
+```dotenv
+SEND_EMPTY_EMAIL=true
+```
+
+With the default value of `true`, the application preserves the original behavior and sends email even when no issues match the configured filters. This can be useful when a scheduled report should confirm that there is no work to report.
+
+```dotenv
+SEND_EMPTY_EMAIL=false
+```
+
+When set to `false`, SMTP delivery is suppressed for empty digests. STDOUT output is still generated, so local runs, GitHub Actions logs, Jenkins logs, and container logs remain useful for confirming that the digest ran successfully.
+
+This setting affects only SMTP delivery. It does not change filtering, digest rendering, JSON output, YAML output, or STDOUT behavior.
+
 ## Selecting the assignee
 
 Set `GITHUB_USER` to the GitHub login whose assigned issues should be included. It defaults to `@me`, which resolves to the authenticated token owner through GraphQL. To send email, append a destination address after a colon.
@@ -172,7 +191,7 @@ For every configured user, the application:
 3. Applies filtering.
 4. Builds digest sections.
 5. Renders text and HTML output.
-6. Optionally sends email.
+6. Optionally sends email. Empty email delivery is controlled by `SEND_EMPTY_EMAIL`.
 7. Contributes its results to STDOUT output.
 
 This preserves the existing one-user-per-digest model while allowing a single invocation to generate multiple digests.
@@ -355,7 +374,7 @@ python -m pip install -e '.[dev]'
 PYTHONPATH=src pytest -q
 ```
 
-The tests cover configuration loading, configured-user parsing, GitHub App token generation, filter parsing, local filtering, Project item normalization, digest grouping and sorting, text and HTML rendering, fan-out output aggregation, SMTP message construction, and GitHub client pagination behavior using mocked GraphQL responses.
+The tests cover configuration loading, configured-user parsing, GitHub App token generation, filter parsing, local filtering, Project item normalization, digest grouping and sorting, text and HTML rendering, fan-out output aggregation, SMTP message construction, empty digest email delivery decisions, and GitHub client pagination behavior using mocked GraphQL responses.
 
 
 ## Container usage
