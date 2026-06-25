@@ -9,8 +9,9 @@ USER_BIN ?= $(HOME)/.local/bin
 SYSTEM_BIN ?= /usr/local/bin
 SRC_DIRS ?= src tests
 TEMPLATE_FILES ?= templates/*.j2
+APP_NAME ?= github-project-digest
 
-.PHONY: help venv deps dev-deps system-deps pylint flake8 bandit isort mypy pyright ruff j2lint format check test all
+.PHONY: help venv deps dev-deps system-deps pylint flake8 bandit isort mypy pyright ruff j2lint format check test all install system-install
 
 help: ## Show available Make targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -60,3 +61,13 @@ test: venv ## Run tests
 	PYTHONPATH=src $(PYTHON) -m pytest -q
 
 all: deps dev-deps format check test ## Run the full local quality workflow
+
+install: deps ## Copy the console script into the user-local bin directory
+	mkdir -p $(USER_BIN)
+	cp $(VENV)/bin/$(APP_NAME) $(USER_BIN)/$(APP_NAME)
+	chmod 755 $(USER_BIN)/$(APP_NAME)
+
+system-install: deps ## Copy the console script into the system bin directory
+	mkdir -p $(SYSTEM_BIN)
+	cp $(VENV)/bin/$(APP_NAME) $(SYSTEM_BIN)/$(APP_NAME)
+	chmod 755 $(SYSTEM_BIN)/$(APP_NAME)
