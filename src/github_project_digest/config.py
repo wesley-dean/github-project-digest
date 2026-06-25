@@ -400,14 +400,17 @@ def load_config() -> Config:
     @brief Load and normalize all runtime configuration.
     @details
     This function is the public entrypoint for configuration.  It loads `.env`
-    values, validates constrained settings, parses the selected GitHub user list,
-    loads due marker thresholds, loads the empty-digest email delivery preference,
-    and returns a single immutable `Config` instance for the rest of the digest
-    pipeline.
+    from the current working directory, validates constrained settings, parses
+    the selected GitHub user list, loads due marker thresholds, loads the
+    empty-digest email delivery preference, and returns a single immutable
+    `Config` instance for the rest of the digest pipeline.
 
     Environment access is intentionally concentrated here so GitHub access,
     filtering, rendering, due marker selection, and email delivery can be tested
-    with explicit values rather than direct process-state dependencies.
+    with explicit values rather than direct process-state dependencies.  The
+    `.env` lookup is deliberately anchored to the process working directory so
+    tests that change directories do not accidentally load a developer's project
+    secrets from the repository root.
 
     @returns Fully populated runtime `Config`.
 
@@ -417,7 +420,7 @@ def load_config() -> Config:
     @endcode
     """
 
-    load_dotenv(override=True)
+    load_dotenv(dotenv_path=".env", override=True)
 
     owner_type = os.getenv("GITHUB_PROJECT_OWNER_TYPE", "organization").lower().strip()
     if owner_type not in {"organization", "user"}:
