@@ -365,6 +365,43 @@ With that configuration, issues due in 1-5 days use ⚠️, issues due in 6-14 d
 
 If your filter includes `state:open` or `status:open`, closed issues will normally be excluded before the Closed section is built. Remove that filter term if you want the digest to include closed/completed items.
 
+## Makefile workflows
+
+The repository includes a Makefile that wraps common local development tasks.  The default target is `help`, so running `make` or `make help` shows the available commands.
+
+```bash
+make
+make help
+```
+
+Create the local virtual environment and install dependencies:
+
+```bash
+make venv
+make deps
+make dev-deps
+```
+
+Run formatting, checks, and tests:
+
+```bash
+make format
+make check
+make test
+make all
+```
+
+`make all` runs the local quality workflow: dependency installation, development dependency installation, formatting, checks, and tests.  It does not install the console script into either `~/.local/bin` or `/usr/local/bin`.
+
+Install the generated console script explicitly when needed:
+
+```bash
+make install
+make system-install
+```
+
+`make install` copies the virtual-environment-generated `github-project-digest` script into `~/.local/bin`.  `make system-install` copies it into `/usr/local/bin` and may require elevated permissions depending on the local system.
+
 ## Running tests
 
 Install the project with the development extras and run pytest:
@@ -372,6 +409,13 @@ Install the project with the development extras and run pytest:
 ```bash
 python -m pip install -e '.[dev]'
 PYTHONPATH=src pytest -q
+```
+
+Or use the Makefile wrapper:
+
+```bash
+make dev-deps
+make test
 ```
 
 The tests cover configuration loading, configured-user parsing, GitHub App token generation, filter parsing, local filtering, Project item normalization, digest grouping and sorting, text and HTML rendering, fan-out output aggregation, SMTP message construction, empty digest email delivery decisions, and GitHub client pagination behavior using mocked GraphQL responses.

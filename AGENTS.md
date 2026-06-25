@@ -183,8 +183,81 @@ If an unrelated defect is discovered while implementing a feature:
 -   Fix it immediately if it blocks implementation or causes tests to
     fail.
 -   Otherwise, stop and ask before expanding the scope.
--   Document incidental fixes in the pull request. \## High-Level Data
-    Flow
+-   Document incidental fixes in the pull request.
+
+## Makefile Contributor Workflow
+
+The repository includes a Makefile that provides the preferred local
+interface for routine development tasks.
+
+Contributors should start with:
+
+``` text
+make help
+```
+
+The default Make target is `help`, so running `make` without a target
+should display the available commands rather than performing a mutating
+operation.
+
+Use the Makefile targets rather than hand-running long command chains
+when a target exists.
+
+Common local setup targets:
+
+``` text
+make venv
+make deps
+make dev-deps
+```
+
+Dependency target semantics:
+
+-   `deps` installs the project and runtime dependencies into the local
+    virtual environment.
+-   `dev-deps` installs the project, runtime dependencies, and developer
+    checker dependencies into the local virtual environment.
+-   `system-deps` installs the project and developer checker dependencies
+    with the system Python. It is a Python dependency installation target,
+    not an operating-system package installation target.
+
+Common quality targets:
+
+``` text
+make format
+make check
+make test
+make all
+```
+
+`make all` intentionally runs the local quality workflow only:
+
+1.  Runtime dependency installation
+2.  Development dependency installation
+3.  Formatting
+4.  Checks
+5.  Tests
+
+`make all` must not install the console script into either
+`~/.local/bin` or `/usr/local/bin`.
+
+Installation targets are explicit:
+
+``` text
+make install
+make system-install
+```
+
+`make install` installs the generated console script into `~/.local/bin`.
+`make system-install` installs the generated console script into
+`/usr/local/bin`.
+
+When adapting this Makefile pattern to other Python projects, keep the
+generic variables (`VENV`, `PYTHON`, `PIP`, `SRC_DIRS`, and related
+settings) reusable and isolate project-specific values, such as the
+console script name, behind variables.
+
+## High-Level Data Flow
 
 The application follows a linear pipeline:
 
@@ -600,6 +673,8 @@ Tests should validate:
 9.  Per-user SMTP delivery behavior
 10. Empty-digest SMTP delivery policy (`SEND_EMPTY_EMAIL`)
 11. Configuration validation for runtime delivery options
+12. Makefile-backed local development workflows when build tooling
+    changes
 
 Tests should avoid unnecessary dependency on GitHub APIs.
 
