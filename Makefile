@@ -10,7 +10,7 @@ SYSTEM_BIN ?= /usr/local/bin
 SRC_DIRS ?= src tests
 TEMPLATE_FILES ?= templates/*.j2
 
-.PHONY: help venv deps dev-deps system-deps pylint flake8 bandit isort mypy pyright ruff j2lint
+.PHONY: help venv deps dev-deps system-deps pylint flake8 bandit isort mypy pyright ruff j2lint format check test all
 
 help: ## Show available Make targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -18,35 +18,45 @@ help: ## Show available Make targets
 venv: ## Create the local virtual environment when it does not already exist
 	@test -x $(PYTHON) || $(SYSTEM_PYTHON) -m venv $(VENV)
 
-deps: venv ## Install the project and runtime dependencies into the local virtual environment
+deps: venv ## Install runtime dependencies locally
 	$(PIP) install -e .
 
-dev-deps: venv ## Install the project, runtime dependencies, and developer checker dependencies into the local virtual environment
+dev-deps: venv ## Install development dependencies locally
 	$(PIP) install -e '.[dev]'
 
-system-deps: ## Install the project, runtime dependencies, and developer checker dependencies with the system Python
+system-deps: ## Install development dependencies globally
 	$(SYSTEM_PIP) install -e '.[dev]'
 
-pylint: venv ## Run pylint against source and test code
+pylint: venv ## Run pylint
 	$(PYTHON) -m pylint $(SRC_DIRS)
 
-flake8: venv ## Run flake8 against source and test code
+flake8: venv ## Run flake8
 	$(PYTHON) -m flake8 $(SRC_DIRS)
 
-bandit: venv ## Run bandit security checks against source code
+bandit: venv ## Run bandit
 	$(PYTHON) -m bandit -r src
 
-isort: venv ## Check import ordering without modifying files
+isort: venv ## Check import ordering
 	$(PYTHON) -m isort --check-only $(SRC_DIRS)
 
-mypy: venv ## Run mypy static type checks against source code
+mypy: venv ## Run mypy
 	$(PYTHON) -m mypy src
 
-pyright: venv ## Run pyright static type checks
+pyright: venv ## Run pyright
 	$(VENV)/bin/pyright
 
-ruff: venv ## Run ruff lint checks against source and test code
+ruff: venv ## Run ruff checks
 	$(PYTHON) -m ruff check $(SRC_DIRS)
 
-j2lint: venv ## Run j2lint against Jinja2 templates
+j2lint: venv ## Run j2lint
 	$(VENV)/bin/j2lint $(TEMPLATE_FILES)
+
+format: venv ## Format code
+	$(PYTHON) -m ruff format $(SRC_DIRS)
+
+check: pylint flake8 bandit isort mypy pyright ruff j2lint ## Run all checks
+
+test: venv ## Run tests
+	PYTHONPATH=src $(PYTHON) -m pytest -q
+
+all: deps dev-deps format check test ## Run the full local quality workflow
