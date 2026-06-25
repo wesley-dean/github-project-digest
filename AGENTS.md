@@ -65,6 +65,7 @@ Responsibilities:
 - Build `ConfiguredUser` entries
 - Preserve first-user compatibility fields on `Config`
 - Load due-date marker thresholds
+- Load empty-digest email delivery preferences
 - Build per-user SMTP configuration
 - Select GitHub authentication mode
 
@@ -184,6 +185,26 @@ Application entrypoint.
 Coordinates the complete pipeline.
 
 When `GITHUB_USER` contains multiple configured user entries, the CLI performs fan-out by running the existing digest pipeline once per configured user. This preserves the product rule that each rendered digest has one selected GitHub user, one assignee context, one optional email recipient, and one render pass.
+
+#### Empty Digest Delivery
+
+SMTP delivery is controlled independently from digest generation.
+
+When a configured user has SMTP enabled:
+
+- `SEND_EMPTY_EMAIL=true` (default) preserves the historical behavior by delivering a rendered digest even when no issues match the configured filters.
+- `SEND_EMPTY_EMAIL=false` suppresses SMTP delivery when the rendered digest contains zero matching issues.
+
+This configuration affects SMTP delivery only.
+
+The application still:
+
+- Retrieves Project data
+- Applies filtering
+- Renders the digest
+- Produces STDOUT output
+
+This separation preserves local debugging, CI logging, and scheduled-job visibility while allowing administrators to suppress "nothing to report" emails.
 
 This module should remain thin.
 
@@ -381,6 +402,8 @@ Tests should validate:
 7. Configured user parsing
 8. Fan-out STDOUT aggregation
 9. Per-user SMTP delivery behavior
+10. Empty-digest SMTP delivery policy (`SEND_EMPTY_EMAIL`)
+11. Configuration validation for runtime delivery options
 
 Tests should avoid unnecessary dependency on GitHub APIs.
 

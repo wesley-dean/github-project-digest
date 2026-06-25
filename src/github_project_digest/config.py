@@ -4,9 +4,10 @@
 This module translates environment variables and optional `.env` values into a
 single immutable `Config` object.  The configuration layer intentionally keeps
 Jenkins, Docker, local shell usage, PAT authentication, GitHub App
-authentication, SMTP delivery, template selection, Project filtering, and due
-marker thresholds behind one consistent interface so the rest of the application
-can operate on typed values rather than raw process environment strings.
+authentication, SMTP delivery, template selection, Project filtering, due
+marker thresholds, and empty-digest delivery preferences behind one consistent
+interface so the rest of the application can operate on typed values rather
+than raw process environment strings.
 
 The module also owns the `GITHUB_USER` parsing convention.  A colon-separated
 value identifies both the GitHub assignee and the optional email destination,
@@ -53,6 +54,16 @@ seven days use the calendar marker unless overridden by `DUE_UPCOMING_DAYS`.
 """
 DEFAULT_DUE_UPCOMING_DAYS = 7
 
+"""@var DEFAULT_SEND_EMPTY_EMAIL
+@brief Default empty-digest email delivery behavior.
+@details
+The default preserves the original SMTP delivery behavior by sending configured
+email digests even when the filtered issue count is zero.  Users who prefer quiet
+automation can override this with `SEND_EMPTY_EMAIL=false` while still receiving
+STDOUT output for logs, scheduled jobs, and local verification.
+"""
+DEFAULT_SEND_EMPTY_EMAIL = True
+
 
 @dataclass(frozen=True)
 class ConfiguredUser:
@@ -80,14 +91,20 @@ class Config:
     pipeline.  The rest of the application receives typed values from this
     dataclass instead of reading environment variables directly.  This keeps
     command-line execution, Docker execution, Jenkins execution, PAT auth,
-    GitHub App auth, SMTP delivery, due marker thresholds, and template rendering
-    aligned through one configuration contract.
+    GitHub App auth, SMTP delivery, due marker thresholds, template rendering,
+    and empty-digest delivery behavior aligned through one configuration
+    contract.
 
     The `users` collection is the forward-compatible representation used for
     digest fan-out.  The legacy `github_user`, `recipient_email`, and `smtp`
     fields remain populated from the first configured user so existing single
     user call sites continue to behave as before while the CLI evolves toward
     iterating over `users`.
+
+    The `send_empty_email` field controls only SMTP delivery when a rendered
+    digest has no matching issues.  STDOUT output remains available regardless of
+    this setting so local runs, Jenkins logs, Docker runs, and GitHub Actions
+    logs can still show what the application did.
     """
 
     github_token: str | None
@@ -106,6 +123,7 @@ class Config:
     field_value_limit: int
     due_soon_days: int
     due_upcoming_days: int
+    send_empty_email: bool
     smtp: SmtpConfig | None
 
 
@@ -382,13 +400,17 @@ def load_config() -> Config:
     @brief Load and normalize all runtime configuration.
     @details
     This function is the public entrypoint for configuration.  It loads `.env`
-    values, validates constrained settings, parses the selected GitHub user list,
-    loads due marker thresholds, and returns a single immutable `Config` instance
-    for the rest of the digest pipeline.
+    from the current working directory, validates constrained settings, parses
+    the selected GitHub user list, loads due marker thresholds, loads the
+    empty-digest email delivery preference, and returns a single immutable
+    `Config` instance for the rest of the digest pipeline.
 
     Environment access is intentionally concentrated here so GitHub access,
     filtering, rendering, due marker selection, and email delivery can be tested
-    with explicit values rather than direct process-state dependencies.
+    with explicit values rather than direct process-state dependencies.  The
+    `.env` lookup is deliberately anchored to the process working directory so
+    tests that change directories do not accidentally load a developer's project
+    secrets from the repository root.
 
     @returns Fully populated runtime `Config`.
 
@@ -398,7 +420,7 @@ def load_config() -> Config:
     @endcode
     """
 
-    load_dotenv(override=True)
+    load_dotenv(dotenv_path=".env", override=True)
 
     owner_type = os.getenv("GITHUB_PROJECT_OWNER_TYPE", "organization").lower().strip()
     if owner_type not in {"organization", "user"}:
@@ -434,5 +456,6 @@ def load_config() -> Config:
         field_value_limit=_int_env("GITHUB_PROJECT_FIELD_VALUE_LIMIT", 50),
         due_soon_days=due_soon_days,
         due_upcoming_days=due_upcoming_days,
+        send_empty_email=_bool_env("SEND_EMPTY_EMAIL", DEFAULT_SEND_EMPTY_EMAIL),
         smtp=first_user.smtp,
     )

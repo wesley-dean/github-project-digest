@@ -65,6 +65,45 @@ def _render_user_digest(config: Config, context: dict[str, Any]) -> dict[str, st
     }
 
 
+def _should_deliver_user_digest(
+    config: Config,
+    configured_user: ConfiguredUser,
+    context: dict[str, Any],
+) -> bool:
+    """@fn _should_deliver_user_digest(config, configured_user, context)
+    @brief Decide whether one rendered digest should be sent through SMTP.
+    @details
+    SMTP delivery requires a configured recipient.  When no recipient is present,
+    the digest remains a STDOUT-only result regardless of issue count.
+
+    Non-empty digests are always eligible for SMTP delivery when a recipient is
+    configured.  Empty digests are controlled by `Config.send_empty_email`, which
+    preserves the existing send-by-default behavior while allowing quiet scheduled
+    jobs to suppress no-work emails.
+
+    This helper intentionally makes the delivery decision before the SMTP layer
+    so `emailer.py` can remain focused on message construction and transport.
+    STDOUT rendering is unaffected by this decision.
+
+    @param config Runtime configuration containing the empty-email preference.
+    @param configured_user User-specific recipient and SMTP configuration.
+    @param context Prepared digest context containing the filtered issue count.
+    @returns `True` when SMTP delivery should be attempted, otherwise `False`.
+
+    @par Examples
+    @code
+    if _should_deliver_user_digest(config, configured_user, context):
+        _deliver_user_digest(configured_user, rendered)
+    @endcode
+    """
+
+    if not configured_user.smtp:
+        return False
+    if context["count"] > 0:
+        return True
+    return config.send_empty_email
+
+
 def _deliver_user_digest(configured_user: ConfiguredUser, rendered: dict[str, str]) -> None:
     if configured_user.smtp:
         send_digest_email(configured_user.smtp, rendered["text"], rendered["html"])
@@ -113,7 +152,8 @@ def main() -> int:
         for configured_user in config.users:
             context = _build_user_digest_context(config, configured_user, client)
             rendered = _render_user_digest(config, context)
-            _deliver_user_digest(configured_user, rendered)
+            if _should_deliver_user_digest(config, configured_user, context):
+                _deliver_user_digest(configured_user, rendered)
             contexts.append(context)
             rendered_outputs.append(rendered)
 
