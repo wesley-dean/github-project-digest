@@ -464,3 +464,19 @@ The image entrypoint is `github-project-digest`, so command-line arguments are n
 ## GitHub Actions unit tests
 
 This repository includes a workflow at `.github/workflows/tests.yml` that runs the pytest suite on pushes, pull requests, and manual dispatches. The workflow tests against Python 3.11 and 3.12.
+
+## Dependency maintenance
+
+Routine dependency updates are managed through the centrally hosted Jenkins
+Renovate runner, with explicit enrollment in root `renovate.json`. Both
+GitHub Actions and pip scheduled Dependabot version-update ecosystems are
+disabled using `open-pull-requests-limit: 0`, while security alerts and
+advisory-driven Dependabot updates remain separate. The existing bot-specific
+non-major auto-merge workflow remains confined to Dependabot, and Renovate
+remains subject to required checks and human review.
+
+The publish_container Action previously referenced an upstream SHA with an
+unverified release mapping, so the migration uses a temporary moving
+`@v1.1.1` reference for Renovate to resolve. This reduces supply-chain
+immutability until a reviewed Renovate update restores an immutable pin.
+See [ADR-001](doc/adr/ADR-001-migrate-routine-updates-to-renovate.md).
